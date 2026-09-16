@@ -1,0 +1,53 @@
+{
+  "name": "seller",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts && vitest run --config vitest.api.config.ts",
+    "test:domain": "vitest run --config vitest.config.ts",
+    "test:api": "vitest run --config vitest.api.config.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "tsx scripts/migrate-local.ts",
+    "db:migrate:remote": "wrangler d1 migrations apply seller-db --remote",
+    "deploy": "pnpm build && wrangler deploy",
+    "cf:types": "wrangler types",
+    "restore": "tsx scripts/restore.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.102.8",
+    "big.js": "^7.0.1",
+    "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
+    "hono": "^4.13.8",
+    "jose": "^6.2.12",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.3",
+    "ulid": "^3.0.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.49.0",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260915.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/big.js": "^7.0.0",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "drizzle-kit": "^0.31.10",
+    "prettier": "^3.9.6",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.116.0"
+  }
+}

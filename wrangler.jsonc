@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "seller",
+  "main": "src/api/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "seller-db",
+      "database_id": "5c241e6d-b2ba-4596-9a94-6e4f076bc5ab",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    { "binding": "ATTACHMENTS", "bucket_name": "seller-attachments" },
+    { "binding": "BACKUPS", "bucket_name": "seller-backups" },
+  ],
+  "triggers": { "crons": ["*/30 * * * *", "0 18 * * *"] },
+  "vars": {
+    "APP_ENV": "production",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+  },
+}

@@ -1,0 +1,95 @@
+export const costLineTypes = [
+  ["sale_price", "상품 판매대금", "income", "sale", "customer", "per_item"],
+  [
+    "customer_shipping_fee",
+    "고객 청구 배송비",
+    "income",
+    "sale",
+    "customer",
+    "per_order",
+  ],
+  ["goods_cost", "해외 상품 실결제가", "expense", "purchase", "me", "per_item"],
+  [
+    "payment_fx_fee",
+    "해외 결제 수수료",
+    "expense",
+    "purchase",
+    "me",
+    "per_purchase",
+  ],
+  [
+    "cn_domestic_shipping",
+    "중국 내 배송비",
+    "expense",
+    "transport",
+    "me",
+    "per_purchase",
+  ],
+  ["intl_shipping", "국제배송비", "expense", "transport", "me", "per_parcel"],
+  [
+    "forwarder_fee",
+    "배송대행 수수료",
+    "expense",
+    "transport",
+    "me",
+    "per_parcel",
+  ],
+  ["customs_duty", "관세", "expense", "customs", "by_model", "per_parcel"],
+  [
+    "customs_vat",
+    "수입 부가세",
+    "expense",
+    "customs",
+    "by_model",
+    "per_parcel",
+  ],
+  [
+    "kr_domestic_shipping",
+    "별도 국내 택배비",
+    "expense",
+    "transport",
+    "me",
+    "per_parcel",
+  ],
+  [
+    "channel_commission",
+    "채널 판매 수수료",
+    "expense",
+    "channel",
+    "me",
+    "percent_of_price",
+  ],
+  [
+    "payment_processing_fee",
+    "결제 수수료",
+    "expense",
+    "channel",
+    "me",
+    "percent_of_price",
+  ],
+  [
+    "inspection_packaging",
+    "검수·포장 자재",
+    "expense",
+    "other",
+    "me",
+    "per_item",
+  ],
+  ["ads", "광고비", "expense", "other", "me", "per_month"],
+  [
+    "returns_reserve",
+    "반품·불량 예비비",
+    "expense",
+    "other",
+    "me",
+    "percent_of_price",
+  ],
+  ["fixed_costs", "월 고정비", "expense", "other", "me", "per_month"],
+] as const;
+export function validateCostDirection(code: string, direction: string) {
+  const item = costLineTypes.find((v) => v[0] === code);
+  if (!item || item[2] !== direction)
+    throw new Error(
+      `${item?.[1] ?? code}: 수입·지출 방향이 비용 항목 사전과 다릅니다.`,
+    );
+}
