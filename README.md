@@ -13,12 +13,16 @@
 | [docs/PLAN.md](docs/PLAN.md) | 기획서 본문. 브리프 검토(빈틈·반박), 사업 모델·규제 전제, 메뉴·화면, 첫 화면, 상태·완료 조건, 비용 계산 규칙, 시나리오, 자동화 구조, 개발 순서 | 사용자, 구현자 |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | 엔티티·필드·관계·불변 규칙·상태 전이·파생 작업 규칙 | 구현자 |
 | [docs/SEED_RESEARCH.md](docs/SEED_RESEARCH.md) | 지금까지의 조사 결과를 프로그램 기록 원칙(확인/추정/미확인)대로 재기록한 초기 데이터 | 사용자, 구현자 |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | 용어·개념집. 판매 요건 게이트, KC, 라이선스·병행수입, 사업 모델 4가지, 직배송 vs 배송대행, 통관, 원가 개념 | 사용자 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 기술 구조 설계(D-05). 스택, 저장소 구조, wrangler 설정, M0 스키마 SQL, 인증, API 규약, 백업·복원, 골격 완료 정의 | 구현자 |
+| [docs/RESEARCH_SHEET.md](docs/RESEARCH_SHEET.md) | 조사 시트(엑셀) 열 구조와 데이터 모델 대응표 | 사용자, 구현자 |
+| [templates/research_template.xlsx](templates/research_template.xlsx) | 조사 시트 템플릿. 초기 조사 데이터가 들어 있고, 원가 계산 탭은 미확인 값을 0으로 계산하지 않는다 | 사용자 |
 
 ## 구현자(Astra 6 / Codex CLI) 안내
 
 1. 읽는 순서: `docs/PLAN.md` → `docs/DATA_MODEL.md` → `docs/SEED_RESEARCH.md`.
 2. `PLAN.md` 3장의 구현 규칙 **R-01 ~ R-14는 협상 대상이 아닙니다.** 특히 "미확인 금액을 0으로 계산하지 않는다", "연동되지 않은 자동화를 동작하는 것처럼 보이게 하지 않는다"는 어떤 화면에서도 지켜야 합니다.
 3. 첫 작업 범위는 `PLAN.md` 12장의 **M0 → M1** 입니다. M0가 끝나기 전에 주문·자동화 화면을 만들지 않습니다.
-4. 사용자의 로컬에 있는 웹 프로젝트 골격이 Cloudflare Workers + D1 + R2 구성과 맞지 않으면, 골격을 억지로 살리지 말고 `PLAN.md` 11장의 기술 전제를 따르되 결정 기록(D-05)에 사유를 남깁니다.
+4. 기존 웹 골격은 없습니다. `docs/ARCHITECTURE.md`대로 골격을 만들고, 12장 "골격 완료" 정의 6개를 채운 뒤 M0에 들어갑니다.
 5. 문서와 다르게 만들어야 할 이유가 생기면 코드에 조용히 반영하지 말고 `docs/DECISIONS.md`(없으면 생성)에 "제안 → 근거 → 대안"으로 남기고 사용자 확인을 받습니다.
 6. 사용자를 부를 때는 이름 대신 "사용자님"으로 부릅니다.
