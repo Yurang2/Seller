@@ -79,7 +79,7 @@ I-12: 열린 derived Task는 `(rule_key, entity_type, entity_id)`로 유일. 조
 ### 2.2 ComplianceProfile (판매 요건 프로필, G-01)
 `character_id ref, category enum(plush, plush_keyring, acrylic, stationery, other), model_scope enum(purchase_agency, import_resale, both), gate_result enum(pass, conditional, fail, unknown), gate_reason text, gate_set_by enum(derived, manual), reviewed_at, recheck_by`.
 
-**RequirementItem**: `profile_id, key enum(children_product, kc, trademark_license, parallel_import, customs, labeling, channel_policy, return_policy), question, answer claim<enum|text>, risk_level enum(low, medium, high), item_result enum(pass, conditional, fail, unknown), condition_text, evidence(Link/Attachment)`.
+**RequirementItem**: `profile_id, key enum(children_product, kc, trademark_license, parallel_import, copyright_import, design_right, customs_ip_watch, platform_ip_report, listing_assets, customs, labeling, channel_policy, return_policy), question, answer claim<enum|text>, risk_level enum(low, medium, high), item_result enum(pass, conditional, fail, unknown), condition_text, evidence(Link/Attachment)`.
 
 파생: `gate_result` 계산 규칙은 PLAN 2.2. 수동 설정 시 이유 필수, `competitor_observation`만 근거면 거부(I-14).
 
@@ -134,7 +134,7 @@ I-05: `unknown_keys`가 비어 있지 않으면 `outputs`는 null이고 `overall
 ### 2.9 Channel / Listing
 **Channel**: `name, type enum(smartstore, coupang, cafe24, other), account_ref, commission_rate claim<percent>, payment_fee_rate claim<percent>, fee_applies_to_shipping claim<bool>, settlement_cycle claim<text>, policies json{shipping_fee_policy, return_policy_text, purchase_agency_notice, random_notice}, integration_state enum(none, file, api, error), connector_id?`.
 
-**Listing**: `channel_id, product_id, variant_id?, external_id, url, listed_price money, customer_shipping_fee money, disclosures json, status enum(draft, live, paused, ended), last_verified_at, costing_id (등록 시점 예상)`.
+**Listing**: `channel_id, product_id, variant_id?, external_id, url, listed_price money, customer_shipping_fee money, disclosures json, assets_source enum(own_photo, licensed, seller_provided_with_permission, unknown), status enum(draft, live, paused, ended), last_verified_at, costing_id (등록 시점 예상)`. `assets_source=unknown`이면 `live`로 갈 수 없다.
 
 ### 2.10 Customer — R-13
 `channel_id, external_customer_ref, name, phone, address json{postcode, addr1, addr2}, customs_code_enc text(암호화), customs_code_verified claim<bool>, pii_retention_until date, consent_note`.

@@ -214,7 +214,7 @@
 | A | 프로필ID | R-001 형식(캐릭터×카테고리) |  | `ComplianceProfile.id` |
 | B | 캐릭터 |  |  | `ComplianceProfile.character_id` |
 | C | 카테고리 |  | 봉제인형, 인형 키링, 아크릴, 문구, 기타 | `ComplianceProfile.category` |
-| D | 항목키 |  | children_product, kc, trademark_license, parallel_import, customs, labeling, channel_policy, return_policy | `RequirementItem.key` |
+| D | 항목키 |  | children_product, kc, trademark_license, parallel_import, copyright_import, design_right, customs_ip_watch, platform_ip_report, listing_assets, customs, labeling, channel_policy, return_policy | `RequirementItem.key` |
 | E | 질문 |  |  | `RequirementItem.question` |
 | F | 답변 |  |  | `RequirementItem.answer.value` |
 | G | 상태 |  | 확인, 추정, 미확인 | `RequirementItem.answer.status` |

@@ -23,6 +23,11 @@
 | `kc` | 어린이제품이면 완구 안전확인 대상. **구매대행도 표시 없는 어린이제품의 대행 금지** | 규칙 [확인], 해당 여부 [미확인] | 어린이제품 안전 특별법 제20조 등, 1381 안내 · 2026-09-16. 과태료 금액은 현행 조문 재확인 | 높음 |
 | `trademark_license` | 권리자 Mattel. 중국 브랜드(MiiTAKI, SHANDMOO)의 라이선스 여부 미상 | [미확인] | 판매자 授权 자료 요청, KIPRIS 상표권자·전용사용권 조회 | 높음 |
 | `parallel_import` | 진정상품 + 외국 권리자와 국내 권리자 동일·밀접 관계면 허용. 국내 전용사용권자 독자 제조 시 제한 가능 | 규칙 [확인], 적용 [미확인] | 대법원 판례 요지·법률 안내 · 2026-09-16 | 중간 |
+| `copyright_import` | 저작권법 제124조(침해로 보는 수입) 해당 여부. 국내 저작권자·라이선시 허락 없는 수입 | [미확인] | 변리사·변호사, 한국저작권위원회 | 높음 |
+| `design_right` | 국내 등록 디자인 유사 여부 | [미확인] | KIPRIS 디자인 검색 | 중간 |
+| `customs_ip_watch` | Mattel·국내 라이선시의 세관 지재권 신고 여부, 통관보류 위험 | [미확인] | 관세청 지재권 신고 조회, 관세사 | 높음 |
+| `platform_ip_report` | 채널 지재권 신고 시 소명 가능 여부 | [미확인] | 네이버 지식재산권보호센터 | 중간 |
+| `listing_assets` | 상세페이지 이미지 사용권 | [미확인] | 직접 촬영 계획 | 중간 |
 | `customs` | 구매대행: 고객 명의 자가사용 통관(목록통관 한도 현재 기준 미확인). 수입: HS 9503 관세율·한중 FTA 미확인 | [미확인] | 관세청 고객지원, 관세사 | 중간 |
 | `labeling` | 구매대행 표시·개인통관고유부호 안내 필요(구매대행 시). 랜덤 고지 필요 | 규칙 [확인] | 전자상거래법 안내, 채널 정책 | 중간 |
 | `channel_policy` | 미확인 | [미확인] | 채널 판매자 센터 | 낮음 |
@@ -144,4 +149,8 @@
 - SafetyKorea 어린이제품 안전확인 안내: https://www.safetykorea.kr/policy/targetsSafetyCheck3
 - 타오바오 공식 직배송·집운 안내(이용자 글): https://www.fortimoveglobal.com/blog/how-to-buy-from-taobao , https://world-info.kr/362
 - 쏠띵즈 스마트스토어 존재 확인(위시버킷): https://www.wishbucket.io/wishes/3634991 , 인스타그램: https://www.instagram.com/solethings_official/
+- 관세청 지식재산권 보호 안내: http://www.customs.go.kr/kcs/cm/cntnts/cntntsView.do?mi=3082&cntntsId=824
+- 정부24 지식재산권 침해물품 통관보류 요청: https://www.gov.kr/mw/AA020InfoCappView.do?HighCtgCD=A09002&CappBizCD=12200000277
+- 구매대행 지재권 침해 대응 칼럼(법무법인): https://www.thr-law.co.kr/iplaw/board/column/view/no/5453/page_id/
+- 투트랙 해외구매대행 창업 강의 영상(2024-01-18, 자막 미확인): https://www.youtube.com/watch?v=HH3idneppQ4
 - 공급처 후보: https://tao.hooos.com/goods_xV4mNnJcktqx9zWbZauQWQFAt9-NeRBBoczKyg7OpDhV.html , https://tao.hooos.com/goods_aMN803wIotMYYy5vYvHQQeUjty-ejZ00KFz0kgjwXXc9.html , https://detail.tmall.com/item.htm?id=1043043512765 , https://www.ruten.com.tw/item/22637588567212/
