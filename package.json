@@ -16,12 +16,14 @@
     "db:migrate:remote": "wrangler d1 migrations apply seller-db --remote",
     "deploy": "pnpm build && wrangler deploy",
     "cf:types": "wrangler types",
-    "restore": "tsx scripts/restore.ts"
+    "restore": "tsx scripts/restore.ts",
+    "backup:verify": "tsx scripts/verify-backup.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
     "big.js": "^7.0.1",
     "drizzle-orm": "^0.45.2",
+    "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
     "hono": "^4.13.8",
     "jose": "^6.2.12",

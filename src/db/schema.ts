@@ -356,3 +356,495 @@ export const import_batches = sqliteTable(
     ),
   ],
 );
+
+// M0 research import storage; M1 domain entities. Claims are stored separately.
+export const characters = sqliteTable(
+  "characters",
+  {
+    id: text("id").primaryKey(),
+    name_ko: text("name_ko").notNull(),
+    name_en: text("name_en"),
+    notes: text("notes"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [],
+);
+export const compliance_profiles = sqliteTable(
+  "compliance_profiles",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    character_id: text("character_id")
+      .references((): AnySQLiteColumn => characters.id)
+      .notNull(),
+    category: text("category"),
+    model_scope: text("model_scope"),
+    gate_result: text("gate_result"),
+    gate_reason: text("gate_reason"),
+    gate_set_by: text("gate_set_by"),
+    reviewed_at: text("reviewed_at"),
+    recheck_by: text("recheck_by"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_compliance_profiles_character_id").on(t.character_id),
+    check(
+      "compliance_profiles_category_enum",
+      sql`category IN ('plush','plush_keyring','acrylic','stationery','other')`,
+    ),
+    check(
+      "compliance_profiles_model_scope_enum",
+      sql`model_scope IN ('purchase_agency','import_resale','both')`,
+    ),
+    check(
+      "compliance_profiles_gate_result_enum",
+      sql`gate_result IN ('unknown','pass','conditional','fail')`,
+    ),
+    check(
+      "compliance_profiles_gate_set_by_enum",
+      sql`gate_set_by IN ('derived','manual')`,
+    ),
+  ],
+);
+export const requirement_items = sqliteTable(
+  "requirement_items",
+  {
+    id: text("id").primaryKey(),
+    profile_id: text("profile_id")
+      .references((): AnySQLiteColumn => compliance_profiles.id)
+      .notNull(),
+    key: text("key"),
+    question: text("question").notNull(),
+    risk_level: text("risk_level"),
+    item_result: text("item_result"),
+    condition_text: text("condition_text"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_requirement_items_profile_id").on(t.profile_id),
+    check(
+      "requirement_items_key_enum",
+      sql`key IN ('children_product','kc','trademark_license','parallel_import','copyright_import','design_right','customs_ip_watch','platform_ip_report','listing_assets','customs','labeling','channel_policy','return_policy')`,
+    ),
+    check(
+      "requirement_items_risk_level_enum",
+      sql`risk_level IN ('low','medium','high')`,
+    ),
+    check(
+      "requirement_items_item_result_enum",
+      sql`item_result IN ('unknown','pass','conditional','fail')`,
+    ),
+    uniqueIndex("uq_requirement_profile_key").on(t.profile_id, t.key),
+  ],
+);
+export const products = sqliteTable(
+  "products",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    character_id: text("character_id").references(
+      (): AnySQLiteColumn => characters.id,
+    ),
+    profile_id: text("profile_id").references(
+      (): AnySQLiteColumn => compliance_profiles.id,
+    ),
+    category: text("category"),
+    option_scheme: text("option_scheme"),
+    status: text("status"),
+    status_reason: text("status_reason"),
+    stage_entered_at: text("stage_entered_at"),
+    hold_recheck_at: text("hold_recheck_at"),
+    chosen_offer_id: text("chosen_offer_id").references(
+      (): AnySQLiteColumn => offers.id,
+    ),
+    chosen_scenario_id: text("chosen_scenario_id").references(
+      (): AnySQLiteColumn => shipping_scenarios.id,
+    ),
+    current_costing_id: text("current_costing_id").references(
+      (): AnySQLiteColumn => costings.id,
+    ),
+    pricing_decision_id: text("pricing_decision_id").references(
+      (): AnySQLiteColumn => decisions.id,
+    ),
+    competitor_refs: text("competitor_refs"),
+    images: text("images"),
+    notes: text("notes"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_products_character_id").on(t.character_id),
+    index("idx_products_profile_id").on(t.profile_id),
+    check(
+      "products_category_enum",
+      sql`category IN ('plush','plush_keyring','acrylic','stationery','other')`,
+    ),
+    check(
+      "products_option_scheme_enum",
+      sql`option_scheme IN ('designated','random','set')`,
+    ),
+    check(
+      "products_status_enum",
+      sql`status IN ('discovered','researching','costing','pricing','listing_ready','live','paused','discontinued','rejected','on_hold')`,
+    ),
+    index("idx_products_chosen_offer_id").on(t.chosen_offer_id),
+    index("idx_products_chosen_scenario_id").on(t.chosen_scenario_id),
+    index("idx_products_current_costing_id").on(t.current_costing_id),
+    index("idx_products_pricing_decision_id").on(t.pricing_decision_id),
+  ],
+);
+export const product_variants = sqliteTable(
+  "product_variants",
+  {
+    id: text("id").primaryKey(),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    name: text("name").notNull(),
+    option_kind: text("option_kind"),
+    random_pool_desc: text("random_pool_desc"),
+    sku_internal: text("sku_internal"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_product_variants_product_id").on(t.product_id),
+    check(
+      "product_variants_option_kind_enum",
+      sql`option_kind IN ('designated','random')`,
+    ),
+  ],
+);
+export const suppliers = sqliteTable(
+  "suppliers",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    name_local: text("name_local"),
+    platform: text("platform"),
+    seller_type: text("seller_type"),
+    store_url: text("store_url"),
+    country: text("country"),
+    contact_channels: text("contact_channels"),
+    payment_methods: text("payment_methods"),
+    trust_notes: text("trust_notes"),
+    last_contact_at: text("last_contact_at"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    check(
+      "suppliers_platform_enum",
+      sql`platform IN ('taobao','tmall','1688','ruten','other')`,
+    ),
+    check(
+      "suppliers_seller_type_enum",
+      sql`seller_type IN ('unknown','brand_flagship','authorized','general')`,
+    ),
+  ],
+);
+export const supplier_messages = sqliteTable(
+  "supplier_messages",
+  {
+    id: text("id").primaryKey(),
+    supplier_id: text("supplier_id")
+      .references((): AnySQLiteColumn => suppliers.id)
+      .notNull(),
+    at: text("at").notNull(),
+    direction: text("direction"),
+    summary: text("summary"),
+    attachment_ids: text("attachment_ids"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_supplier_messages_supplier_id").on(t.supplier_id),
+    check("supplier_messages_direction_enum", sql`direction IN ('in','out')`),
+  ],
+);
+export const offers = sqliteTable(
+  "offers",
+  {
+    id: text("id").primaryKey(),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    supplier_id: text("supplier_id")
+      .references((): AnySQLiteColumn => suppliers.id)
+      .notNull(),
+    variant_id: text("variant_id").references(
+      (): AnySQLiteColumn => product_variants.id,
+    ),
+    url: text("url"),
+    option_desc: text("option_desc"),
+    option_kind: text("option_kind"),
+    set_composition: text("set_composition"),
+    random_rule: text("random_rule"),
+    quantity_tier_min: integer("quantity_tier_min"),
+    quantity_tier_max: integer("quantity_tier_max"),
+    moq: integer("moq"),
+    currency: text("currency"),
+    includes_shipping_to: text("includes_shipping_to"),
+    authenticity_evidence: text("authenticity_evidence"),
+    status: text("status"),
+    rejection_reason: text("rejection_reason"),
+    decision_id: text("decision_id").references(
+      (): AnySQLiteColumn => decisions.id,
+    ),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_offers_product_id").on(t.product_id),
+    index("idx_offers_supplier_id").on(t.supplier_id),
+    index("idx_offers_variant_id").on(t.variant_id),
+    check(
+      "offers_option_kind_enum",
+      sql`option_kind IN ('unknown','single','set','random','designated')`,
+    ),
+    check(
+      "offers_currency_enum",
+      sql`currency IN ('CNY','TWD','KRW','USD','JPY')`,
+    ),
+    check(
+      "offers_includes_shipping_to_enum",
+      sql`includes_shipping_to IN ('unknown','none','cn_domestic','kr')`,
+    ),
+    check(
+      "offers_authenticity_evidence_enum",
+      sql`authenticity_evidence IN ('unknown','official_license_mark','authorization_doc','seller_claim','none')`,
+    ),
+    check(
+      "offers_status_enum",
+      sql`status IN ('candidate','verified','rejected','chosen')`,
+    ),
+    index("idx_offers_decision_id").on(t.decision_id),
+    uniqueIndex("uq_chosen_offer")
+      .on(t.product_id)
+      .where(sql`status='chosen' AND deleted_at IS NULL`),
+  ],
+);
+export const forwarders = sqliteTable(
+  "forwarders",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    url: text("url"),
+    warehouse_address: text("warehouse_address"),
+    currency: text("currency"),
+    notes: text("notes"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    check(
+      "forwarders_currency_enum",
+      sql`currency IN ('CNY','KRW','USD','TWD')`,
+    ),
+  ],
+);
+export const rate_cards = sqliteTable(
+  "rate_cards",
+  {
+    id: text("id").primaryKey(),
+    forwarder_id: text("forwarder_id")
+      .references((): AnySQLiteColumn => forwarders.id)
+      .notNull(),
+    name: text("name").notNull(),
+    effective_from: text("effective_from"),
+    weight_bands: text("weight_bands"),
+    volumetric_rule: text("volumetric_rule"),
+    attachment_ids: text("attachment_ids"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [index("idx_rate_cards_forwarder_id").on(t.forwarder_id)],
+);
+export const shipping_scenarios = sqliteTable(
+  "shipping_scenarios",
+  {
+    id: text("id").primaryKey(),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    offer_id: text("offer_id").references((): AnySQLiteColumn => offers.id),
+    name: text("name").notNull(),
+    route_type: text("route_type"),
+    customs_mode: text("customs_mode"),
+    warnings: text("warnings"),
+    is_default: integer("is_default"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_shipping_scenarios_product_id").on(t.product_id),
+    index("idx_shipping_scenarios_offer_id").on(t.offer_id),
+    check(
+      "shipping_scenarios_route_type_enum",
+      sql`route_type IN ('direct','forwarder')`,
+    ),
+    check(
+      "shipping_scenarios_customs_mode_enum",
+      sql`customs_mode IN ('unknown','list_clearance','general')`,
+    ),
+  ],
+);
+export const shipping_legs = sqliteTable(
+  "shipping_legs",
+  {
+    id: text("id").primaryKey(),
+    scenario_id: text("scenario_id")
+      .references((): AnySQLiteColumn => shipping_scenarios.id)
+      .notNull(),
+    seq: integer("seq").notNull(),
+    from_node: text("from_node"),
+    to_node: text("to_node"),
+    carrier_or_service: text("carrier_or_service"),
+    cost_code: text("cost_code"),
+    basis: text("basis"),
+    includes: text("includes"),
+    rate_card_id: text("rate_card_id").references(
+      (): AnySQLiteColumn => rate_cards.id,
+    ),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_shipping_legs_scenario_id").on(t.scenario_id),
+    check(
+      "shipping_legs_from_node_enum",
+      sql`from_node IN ('seller','forwarder_cn','kr_customs','customer_kr')`,
+    ),
+    check(
+      "shipping_legs_to_node_enum",
+      sql`to_node IN ('forwarder_cn','kr_customs','customer_kr')`,
+    ),
+    check(
+      "shipping_legs_cost_code_enum",
+      sql`cost_code IN ('cn_domestic_shipping','intl_shipping','kr_domestic_shipping','forwarder_fee')`,
+    ),
+    check(
+      "shipping_legs_basis_enum",
+      sql`basis IN ('per_parcel','per_kg','per_item','per_order')`,
+    ),
+    index("idx_shipping_legs_rate_card_id").on(t.rate_card_id),
+  ],
+);
+export const channels = sqliteTable(
+  "channels",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    type: text("type"),
+    account_ref: text("account_ref"),
+    policies: text("policies"),
+    integration_state: text("integration_state"),
+    connector_id: text("connector_id"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    check(
+      "channels_type_enum",
+      sql`type IN ('smartstore','coupang','cafe24','other')`,
+    ),
+    check(
+      "channels_integration_state_enum",
+      sql`integration_state IN ('none','file','api','error')`,
+    ),
+  ],
+);
+export const readiness_items = sqliteTable(
+  "readiness_items",
+  {
+    id: text("id").primaryKey(),
+    key: text("key").notNull(),
+    title: text("title").notNull(),
+    category: text("category"),
+    status: text("status"),
+    depends_on: text("depends_on"),
+    evidence: text("evidence"),
+    due_at: text("due_at"),
+    recheck_at: text("recheck_at"),
+    notes: text("notes"),
+    blocks: text("blocks"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    check(
+      "readiness_items_category_enum",
+      sql`category IN ('decision','legal','tax','customs','channel','finance','logistics','policy','ops')`,
+    ),
+    check(
+      "readiness_items_status_enum",
+      sql`status IN ('not_started','in_progress','blocked','done','not_applicable')`,
+    ),
+    uniqueIndex("uq_readiness_key").on(t.key),
+  ],
+);
+export const costings = sqliteTable(
+  "costings",
+  {
+    id: text("id").primaryKey(),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    offer_id: text("offer_id")
+      .references((): AnySQLiteColumn => offers.id)
+      .notNull(),
+    scenario_id: text("scenario_id")
+      .references((): AnySQLiteColumn => shipping_scenarios.id)
+      .notNull(),
+    channel_id: text("channel_id").references(
+      (): AnySQLiteColumn => channels.id,
+    ),
+    qty_assumption: integer("qty_assumption"),
+    items_per_order: integer("items_per_order"),
+    fx_rate_id: text("fx_rate_id").references(
+      (): AnySQLiteColumn => fx_rates.id,
+    ),
+    inputs_frozen: text("inputs_frozen"),
+    lines: text("lines"),
+    outputs: text("outputs"),
+    overall_status: text("overall_status"),
+    unknown_keys: text("unknown_keys"),
+    is_current: integer("is_current"),
+    decision_id: text("decision_id").references(
+      (): AnySQLiteColumn => decisions.id,
+    ),
+    note: text("note"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_costings_product_id").on(t.product_id),
+    index("idx_costings_offer_id").on(t.offer_id),
+    index("idx_costings_scenario_id").on(t.scenario_id),
+    index("idx_costings_channel_id").on(t.channel_id),
+    index("idx_costings_fx_rate_id").on(t.fx_rate_id),
+    check(
+      "costings_overall_status_enum",
+      sql`overall_status IN ('unknown','estimated','confirmed')`,
+    ),
+    index("idx_costings_decision_id").on(t.decision_id),
+  ],
+);

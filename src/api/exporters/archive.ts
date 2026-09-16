@@ -22,6 +22,21 @@ const tables = [
   "tasks",
   "import_batches",
   "activity_log",
+  "characters",
+  "compliance_profiles",
+  "requirement_items",
+  "products",
+  "product_variants",
+  "suppliers",
+  "supplier_messages",
+  "offers",
+  "forwarders",
+  "rate_cards",
+  "shipping_scenarios",
+  "shipping_legs",
+  "channels",
+  "readiness_items",
+  "costings",
 ] as const;
 type Table = (typeof tables)[number];
 type Row = Record<string, string | number | null>;
@@ -113,7 +128,7 @@ export async function exportArchive(env: Env, full = false) {
   files["attachments/manifest.json"] = strToU8(JSON.stringify(manifests));
   files["manifest.json"] = strToU8(
     JSON.stringify({
-      schema_version: 1,
+      schema_version: 2,
       exported_at: new Date().toISOString(),
       pii_mode: full ? "full" : "masked",
       counts,
@@ -164,7 +179,7 @@ export async function restoreArchive(
     }
   }
   const manifest = json("manifest.json");
-  if (manifest.schema_version !== 1)
+  if (![1, 2].includes(manifest.schema_version))
     throw new AppError(
       409,
       "SCHEMA_VERSION",
@@ -185,11 +200,26 @@ export async function restoreArchive(
   const auditStatements: D1PreparedStatement[] = [];
   const results: unknown[] = [];
   for (const t of tables) {
-    const rows = json(`entities/${t}.json`);
+    const legacyMissing =
+      manifest.schema_version === 1 &&
+      !files[`entities/${t}.json`] &&
+      tables.indexOf(t) > tables.indexOf("activity_log");
+    const rows = legacyMissing ? [] : json(`entities/${t}.json`);
     const columns = tableColumns(t);
-    if (!Array.isArray(rows) || rows.length !== manifest.counts[t])
+    if (
+      !Array.isArray(rows) ||
+      (!legacyMissing && rows.length !== manifest.counts[t])
+    )
       throw new AppError(400, "INVALID_ARCHIVE", `${t} 건수가 다릅니다.`);
     const seen = new Set<string>();
+    const existingRows = (await env.DB.prepare(`SELECT * FROM ${t}`).all<Row>())
+      .results;
+    const existingByKey = new Map(
+      existingRows.map((row) => [
+        JSON.stringify(keyColumns(t).map((k) => row[k])),
+        row,
+      ]),
+    );
     for (const row of rows) {
       if (
         !row ||
@@ -214,18 +244,14 @@ export async function restoreArchive(
           `${t} 식별자가 중복되거나 없습니다.`,
         );
       seen.add(identity);
-      const old = await env.DB.prepare(
-        `SELECT * FROM ${t} WHERE ${keys.map((k) => `${k} = ?`).join(" AND ")}`,
-      )
-        .bind(...keys.map((k) => row[k]))
-        .first<Row>();
+      const old = existingByKey.get(identity);
       const same = old && columns.every((k) => old[k] === row[k]);
       const action = !old ? "add" : same ? "unchanged" : "update";
       if (!old) added++;
       else if (same) unchanged++;
       else updated++;
       results.push({ table: t, key: identity, action });
-      if (!same) {
+      if (!same && apply) {
         const nonkeys = columns.filter((c) => !keys.includes(c));
         statements.push(
           env.DB.prepare(

@@ -1,22 +1,33 @@
-# Seller · 1인 전자상거래 운영 프로그램 (기획 단계)
+# Seller · 1인 전자상거래 운영 프로그램 (M0·M1 로컬 구현)
 
 캐릭터 상품(핑구 인형·키링 등)을 골라 소비자에게 직접 판매하는 1인 B2C 사업을
 **조사 → 요건 확인 → 원가·가격 결정 → 채널 등록 → 주문 → 해외 발주 → 배송 → 응대·반품 → 정산**
 까지 하나의 데이터 위에서 운영하기 위한 웹 앱입니다. 혼자 사용하며, Cloudflare(Workers/Pages) 배포를 전제로 합니다.
 
-현재 **골격 구현·검증 단계**입니다. Claim 기록 화면, D1 저장, R2 증빙, ZIP 내보내기·복원, Access JWT 검증과 회귀 테스트가 구현됐습니다. 로컬·원격 D1 마이그레이션은 적용됐으나, 배포 후 Access 보호 검증은 계정 설정을 기다리고 있습니다. **M0·M1은 아직 착수하지 않았습니다.** 자세한 검증 결과와 실행 방법은 [구현 상태](docs/IMPLEMENTATION_STATUS.md)를 확인하세요.
+현재 **M0·M1을 로컬에서 사용할 수 있습니다.** 홈·상품 보드·판매 요건·공급처·배송 비교·원가 스냅샷·가격 결정·지식·작업·사업 준비·엑셀 가져오기·백업 복원을 구현했습니다. 미확인 금액은 계산하지 않으며 외부 연동은 없습니다. 사용자 지시에 따라 **Cloudflare 배포와 도메인 전체 Access 검증은 보류**했습니다. 자세한 검증 결과는 [구현 상태](docs/IMPLEMENTATION_STATUS.md), 사용 순서는 [로컬 사용 안내](docs/LOCAL_GUIDE.md)를 확인하세요.
+
+```sh
+pnpm install
+pnpm db:migrate:local
+pnpm dev
+# http://127.0.0.1:5173 에서 초기 조사 불러오기
+pnpm test
+pnpm build
+```
+
+로컬 개발은 `.dev.vars.example`을 `.dev.vars`로 복사한 뒤 시작합니다. Windows 저장 경로 설정은 구현 상태 문서를 참고하세요. 사용자 데이터·증빙·비밀 설정은 Git에 포함하지 않습니다.
 
 ## 문서
 
-| 파일 | 내용 | 읽는 사람 |
-|---|---|---|
-| [docs/PLAN.md](docs/PLAN.md) | 기획서 본문. 브리프 검토(빈틈·반박), 사업 모델·규제 전제, 메뉴·화면, 첫 화면, 상태·완료 조건, 비용 계산 규칙, 시나리오, 자동화 구조, 개발 순서 | 사용자, 구현자 |
-| [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | 엔티티·필드·관계·불변 규칙·상태 전이·파생 작업 규칙 | 구현자 |
-| [docs/SEED_RESEARCH.md](docs/SEED_RESEARCH.md) | 지금까지의 조사 결과를 프로그램 기록 원칙(확인/추정/미확인)대로 재기록한 초기 데이터 | 사용자, 구현자 |
-| [docs/GLOSSARY.md](docs/GLOSSARY.md) | 용어·개념집. 판매 요건 게이트, KC, 라이선스·병행수입, 사업 모델 4가지, 직배송 vs 배송대행, 통관, 원가 개념 | 사용자 |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 기술 구조 설계(D-05). 스택, 저장소 구조, wrangler 설정, M0 스키마 SQL, 인증, API 규약, 백업·복원, 골격 완료 정의 | 구현자 |
-| [docs/RESEARCH_SHEET.md](docs/RESEARCH_SHEET.md) | 조사 시트(엑셀) 열 구조와 데이터 모델 대응표 | 사용자, 구현자 |
-| [templates/research_template.xlsx](templates/research_template.xlsx) | 조사 시트 템플릿. 초기 조사 데이터가 들어 있고, 원가 계산 탭은 미확인 값을 0으로 계산하지 않는다 | 사용자 |
+| 파일                                                                 | 내용                                                                                                                                           | 읽는 사람      |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| [docs/PLAN.md](docs/PLAN.md)                                         | 기획서 본문. 브리프 검토(빈틈·반박), 사업 모델·규제 전제, 메뉴·화면, 첫 화면, 상태·완료 조건, 비용 계산 규칙, 시나리오, 자동화 구조, 개발 순서 | 사용자, 구현자 |
+| [docs/DATA_MODEL.md](docs/DATA_MODEL.md)                             | 엔티티·필드·관계·불변 규칙·상태 전이·파생 작업 규칙                                                                                            | 구현자         |
+| [docs/SEED_RESEARCH.md](docs/SEED_RESEARCH.md)                       | 지금까지의 조사 결과를 프로그램 기록 원칙(확인/추정/미확인)대로 재기록한 초기 데이터                                                           | 사용자, 구현자 |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md)                                 | 용어·개념집. 판매 요건 게이트, KC, 라이선스·병행수입, 사업 모델 4가지, 직배송 vs 배송대행, 통관, 원가 개념                                     | 사용자         |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                         | 기술 구조 설계(D-05). 스택, 저장소 구조, wrangler 설정, M0 스키마 SQL, 인증, API 규약, 백업·복원, 골격 완료 정의                               | 구현자         |
+| [docs/RESEARCH_SHEET.md](docs/RESEARCH_SHEET.md)                     | 조사 시트(엑셀) 열 구조와 데이터 모델 대응표                                                                                                   | 사용자, 구현자 |
+| [templates/research_template.xlsx](templates/research_template.xlsx) | 조사 시트 템플릿. 초기 조사 데이터가 들어 있고, 원가 계산 탭은 미확인 값을 0으로 계산하지 않는다                                               | 사용자         |
 
 ## 구현자(Astra 6 / Codex CLI) 안내
 

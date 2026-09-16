@@ -7,6 +7,8 @@ import { readClaims, findClaim, deleteClaim } from "../db/repo/claims";
 import { upsertClaim } from "./services/claims";
 import { saveAttachment } from "./services/attachments";
 import { exportArchive, restoreArchive } from "./exporters/archive";
+import { workspaceRoutes } from "./routes/workspace";
+import { researchRoutes } from "./routes/research";
 const app = new Hono<AppEnv>();
 app.use("/api/*", auth);
 app.use("/api/*", async (c, next) => {
@@ -29,7 +31,7 @@ app.use("/api/*", async (c, next) => {
 });
 app.get("/api/v1/health", async (c) => {
   await c.env.DB.prepare("SELECT 1").first();
-  return c.json({ ok: true, stage: "skeleton", automation: "none" });
+  return c.json({ ok: true, stage: "M0-M1", automation: "none" });
 });
 app.get("/api/v1/claims", async (c) =>
   c.json({ data: await readClaims(c.env.DB) }),
@@ -46,8 +48,39 @@ app.delete("/api/v1/claims/:id", async (c) => {
   const { reason } = z
     .object({ reason: z.string().trim().min(1) })
     .parse(await c.req.json());
+  const before = await findClaim(c.env.DB, c.req.param("id"));
+  if (
+    before &&
+    ["decided_price", "decided_customer_shipping_fee"].includes(
+      before.field_key,
+    )
+  )
+    throw new AppError(
+      400,
+      "DOMAIN_RULE",
+      "결정 가격은 삭제할 수 없습니다. 새 가격 결정을 기록하세요.",
+    );
   if (!(await deleteClaim(c.env.DB, c.req.param("id"), reason, c.get("actor"))))
     throw new AppError(404, "NOT_FOUND", "기록이 없습니다.");
+  if (before?.owner_type === "requirement_items") {
+    const { getRecord, patchManaged, refreshGate } =
+      await import("./services/records");
+    const item = await getRecord(
+      c.env.DB,
+      "requirement_items",
+      before.owner_id,
+    );
+    if (item) {
+      await patchManaged(
+        c.env.DB,
+        "requirement_items",
+        item,
+        { item_result: "unknown" },
+        "답변 근거 삭제로 재판정 필요",
+      );
+      await refreshGate(c.env.DB, item.profile_id);
+    }
+  }
   return c.json({ deleted: true });
 });
 app.post("/api/v1/attachments", async (c) =>
@@ -104,6 +137,8 @@ app.post("/api/v1/import", async (c) => {
     ),
   );
 });
+app.route("/api/v1", workspaceRoutes);
+app.route("/api/v1", researchRoutes);
 app.notFound((c) =>
   c.json(
     {

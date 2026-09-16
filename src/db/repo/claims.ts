@@ -87,38 +87,34 @@ export async function persistClaim(
         set: row,
       }),
     orm.delete(claim_attachments).where(eq(claim_attachments.claim_id, id)),
-    orm
-      .insert(activity_log)
-      .values({
-        id: ulid(),
-        entity_type: "claim",
-        entity_id: id,
-        action: existing ? "update" : "create",
-        before_json: existing
-          ? JSON.stringify({
-              ...existing,
-              attachment_ids: beforeAttachments.map((a) => a.attachment_id),
-            })
-          : null,
-        after_json: JSON.stringify({
-          ...row,
-          attachment_ids: c.attachment_ids,
-        }),
-        reason,
-        actor,
-        at: now,
+    orm.insert(activity_log).values({
+      id: ulid(),
+      entity_type: "claim",
+      entity_id: id,
+      action: existing ? "update" : "create",
+      before_json: existing
+        ? JSON.stringify({
+            ...existing,
+            attachment_ids: beforeAttachments.map((a) => a.attachment_id),
+          })
+        : null,
+      after_json: JSON.stringify({
+        ...row,
+        attachment_ids: c.attachment_ids,
       }),
+      reason,
+      actor,
+      at: now,
+    }),
   ];
   if (c.attachment_ids.length)
     writes.push(
-      orm
-        .insert(claim_attachments)
-        .values(
-          c.attachment_ids.map((attachment_id) => ({
-            claim_id: id,
-            attachment_id,
-          })),
-        ),
+      orm.insert(claim_attachments).values(
+        c.attachment_ids.map((attachment_id) => ({
+          claim_id: id,
+          attachment_id,
+        })),
+      ),
     );
   await orm.batch(writes);
   return {
@@ -143,19 +139,17 @@ export async function deleteClaim(
       .update(claims)
       .set({ deleted_at: at, updated_at: at })
       .where(eq(claims.id, id)),
-    orm
-      .insert(activity_log)
-      .values({
-        id: ulid(),
-        entity_type: "claim",
-        entity_id: id,
-        action: "delete",
-        before_json: JSON.stringify(before),
-        after_json: JSON.stringify({ ...before, deleted_at: at }),
-        reason,
-        actor,
-        at,
-      }),
+    orm.insert(activity_log).values({
+      id: ulid(),
+      entity_type: "claim",
+      entity_id: id,
+      action: "delete",
+      before_json: JSON.stringify(before),
+      after_json: JSON.stringify({ ...before, deleted_at: at }),
+      reason,
+      actor,
+      at,
+    }),
   ]);
   return true;
 }
