@@ -3,6 +3,13 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { AppEnv } from "./env";
 const keysets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 export const auth = createMiddleware<AppEnv>(async (c, next) => {
+  const url = new URL(c.req.url);
+  const local = (url.protocol === "app:" && url.host === "seller") ||
+    (["http:", "https:"].includes(url.protocol) && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname));
+  if (c.env.APP_ENV === "desktop" && local) {
+    c.set("actor", "user");
+    return next();
+  }
   if (c.env.APP_ENV === "development") {
     c.set("actor", "user");
     return next();

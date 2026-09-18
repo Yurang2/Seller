@@ -1,0 +1,30 @@
+appId: com.yurang2.seller
+productName: Seller
+directories:
+  output: release
+files:
+  - dist/client/**
+  - dist/desktop/**
+  - migrations/*.sql
+  - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+  artifactName: Seller-Setup-${version}.${ext}
+portable:
+  artifactName: Seller-Portable-${version}.${ext}
+publish: null

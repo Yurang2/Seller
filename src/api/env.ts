@@ -1,8 +1,9 @@
+import type { BlobStore } from "../platform/storage";
 export interface Env {
   DB: D1Database;
-  ATTACHMENTS: R2Bucket;
-  BACKUPS: R2Bucket;
-  ASSETS: Fetcher;
+  ATTACHMENTS: BlobStore;
+  BACKUPS: BlobStore;
+  ASSETS: Pick<Fetcher, "fetch">;
   APP_ENV: string;
   ACCESS_TEAM_DOMAIN: string;
   ACCESS_AUD: string;

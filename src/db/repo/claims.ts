@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { drizzle } from "../../platform/orm";
 import {
   claims,
   claim_attachments,

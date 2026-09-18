@@ -14,6 +14,8 @@
   },
   "include": [
     "src",
+    "electron",
+    "tests/platform",
     "tests/domain",
     "scripts",
     "vite.config.ts",
