@@ -24,13 +24,13 @@
 | value_json | json | kind별 값. money는 `{amount_minor, currency}`, range는 `{min, likely, max, currency?}` |
 | source_type | enum(`url`,`screenshot`,`message`,`call`,`document`,`competitor_observation`,`self_estimate`,`api`) | R-09: competitor_observation은 게이트·가격 결정의 단독 근거 불가 |
 | source_ref | text | URL, 문서명, 대화 상대 등 |
-| attachment_ids | json[] | 증빙. 가격·배송 견적 kind에서 `confirmed`이려면 1개 이상(I-01) |
+| attachment_ids | json[] | 증빙. 외부 사실(오퍼 가격·배송, 구간 비용, 요율표, 관세·부가세, 채널 수수료)에서 `confirmed`이려면 1개 이상(I-01). 같은 소유자에 올린 이미지·PDF만 인정하며 다른 기록의 파일이나 텍스트 파일은 거부한다. 내 정책값(가정 판매가·청구 배송비·광고비·고정비)은 대상이 아니다 |
 | checked_at | datetime | 확인 시각 |
 | recheck_by | date | 필수. 기본값: 가격 30일, 배송 30일, 환율 1일, 요건 180일, 기타 90일 |
 | note | text | 조건(옵션·수량·행사 등) |
 | basis_json | json | 이 값이 성립하는 조건: `{quantity, option, includes[], per}` |
 
-파생 규칙: `is_stale = recheck_by < today`. 파생값의 상태 = 입력 중 최약(R-04).
+파생 규칙: `is_stale = status != unknown AND recheck_by < today`. 미확인 자리표시 값은 "조사 전"이지 "오래된 근거"가 아니므로 신선도 대상이 아니다. 파생값의 상태 = 입력 중 최약(R-04).
 
 ### 1.2 Attachment
 `owner_type, owner_id, purpose enum(evidence, screenshot, invoice, receipt, label, document, other), r2_key, filename, mime, size, sha256, captured_at, note`.
@@ -63,7 +63,7 @@ I-12: 열린 derived Task는 `(rule_key, entity_type, entity_id)`로 유일. 조
 - **Sop**(절차): `key, title, steps_json[{n, text, check}], inputs, outputs, failure_handling, automation_state enum(none, file, api), job_key`.
 
 ### 1.7 Setting
-`key, value_json`. 필수 키: `business_model enum(undecided, purchase_agency, import_resale, hybrid)`, `mode_override enum(auto, research, operations)`, `default_fx_source`, `pii_retention_days`, `recheck_defaults_json`, `target_margin_rate`, `monthly_fixed_costs money(KRW)`, `expected_monthly_units int`.
+`key, value_json`. 필수 키: `business_model enum(undecided, purchase_agency, import_resale, hybrid, domestic_wholesale)`, `mode_override enum(auto, research, operations)`, `default_fx_source`, `pii_retention_days`, `recheck_defaults_json`, `target_margin_rate`, `monthly_fixed_costs money(KRW)`, `expected_monthly_units int`.
 
 ### 1.8 FxRate
 `base_currency, quote_currency('KRW'), rate text(decimal), as_of_date, kind enum(reference, card_actual, manual), source, note`. Costing은 특정 FxRate를 참조해 얼린다.
@@ -81,7 +81,7 @@ I-12: 열린 derived Task는 `(rule_key, entity_type, entity_id)`로 유일. 조
 
 **RequirementItem**: `profile_id, key enum(children_product, kc, trademark_license, parallel_import, copyright_import, design_right, customs_ip_watch, platform_ip_report, listing_assets, customs, labeling, channel_policy, return_policy), question, answer claim<enum|text>, risk_level enum(low, medium, high), item_result enum(pass, conditional, fail, unknown), condition_text, evidence(Link/Attachment)`.
 
-파생: `gate_result` 계산 규칙은 PLAN 2.2. 수동 설정 시 이유 필수, `competitor_observation`만 근거면 거부(I-14).
+파생: `gate_result`는 항목 판정에서만 집계된다(어떤 항목이든 `fail`이면 `fail`, 미판정이 남으면 `unknown`, `conditional`이 있으면 `conditional`, 그 외 `pass`). 수동 판정 경로는 두지 않는다. 항목 판정의 근거 규칙(I-14): `competitor_observation`은 거부, 위험도 `high` 항목의 통과·조건부는 `confirmed` 답변 + 첨부 또는 `evidence_for` 링크 필요, `self_estimate` 답변으로는 `low`가 아닌 항목을 `pass`로 판정할 수 없다.
 
 ### 2.3 Product / ProductVariant
 **Product**: `name, character_id, profile_id, category, option_scheme enum(designated, random, set), age_marking claim<text>, status enum(discovered, researching, costing, pricing, listing_ready, live, paused, discontinued, rejected, on_hold), status_reason, stage_entered_at, hold_recheck_at, chosen_offer_id, chosen_scenario_id, current_costing_id, decided_price money, decided_customer_shipping_fee money, pricing_decision_id ref(Decision), competitor_refs json[{url, price money, observed_at, note}], images json[]`.
@@ -99,17 +99,17 @@ I-12: 열린 derived Task는 `(rule_key, entity_type, entity_id)`로 유일. 조
 | supplier_id, product_id, variant_id? | ref |
 | url | text |
 | option_desc | text |
-| option_kind | enum(single, set, random, designated) |
+| option_kind | enum(unknown, single, set, random, designated) |
 | set_composition, random_rule | text (예: "4개 구매 시 중복 없음") |
 | quantity_tier_min, quantity_tier_max, moq | int |
 | currency | text |
 | listed_price | claim<money> (표시가) |
 | checkout_price | claim<money> (실결제가, 행사·쿠폰 반영) |
-| includes_shipping_to | enum(none, cn_domestic, kr) |
+| includes_shipping_to | enum(unknown, none, cn_domestic, kr) |
 | cn_domestic_shipping | claim<money> |
 | intl_shipping_by_seller | claim<money> (직배송 시 판매자 청구액) |
 | lead_time_days | claim<range> |
-| authenticity_evidence | enum(official_license_mark, authorization_doc, seller_claim, none, unknown) + attachment |
+| authenticity_evidence | enum(unknown, official_license_mark, authorization_doc, seller_claim, none) + attachment |
 | status | enum(candidate, verified, rejected, chosen) |
 | rejection_reason | text |
 
@@ -134,7 +134,7 @@ I-05: `unknown_keys`가 비어 있지 않으면 `outputs`는 null이고 `overall
 ### 2.9 Channel / Listing
 **Channel**: `name, type enum(smartstore, coupang, cafe24, other), account_ref, commission_rate claim<percent>, payment_fee_rate claim<percent>, fee_applies_to_shipping claim<bool>, settlement_cycle claim<text>, policies json{shipping_fee_policy, return_policy_text, purchase_agency_notice, random_notice}, integration_state enum(none, file, api, error), connector_id?`.
 
-**Listing**: `channel_id, product_id, variant_id?, external_id, url, listed_price money, customer_shipping_fee money, disclosures json, assets_source enum(own_photo, licensed, seller_provided_with_permission, unknown), status enum(draft, live, paused, ended), last_verified_at, costing_id (등록 시점 예상)`. `assets_source=unknown`이면 `live`로 갈 수 없다.
+**Listing**: `channel_id, product_id, variant_id?, external_id, url, listed_price money(KRW), customer_shipping_fee money(KRW), disclosures json{purchase_agency_notice, random_notice, origin_notice, return_notice}, assets_source enum(unknown, own_photo, licensed, seller_provided_with_permission), status enum(draft, live, paused, ended), last_verified_at date, costing_id (등록 시점 예상), notes`. `live` 조건: 채널 상품 번호 또는 URL, 등록 판매가, `assets_source != unknown`, 노출 확인일, 상품이 `listing_ready/live/paused`, 등록 판매가 = 결정 판매가.
 
 ### 2.10 Customer — R-13
 `channel_id, external_customer_ref, name, phone, address json{postcode, addr1, addr2}, customs_code_enc text(암호화), customs_code_verified claim<bool>, pii_retention_until date, consent_note`.
@@ -189,7 +189,7 @@ I-11: `direction`은 `CostLineType.direction`과 일치해야 한다.
 | | researching→costing | 첨부 있는 오퍼 ≥1, 시나리오 ≥1, 프로필 ≠ fail |
 | | costing→pricing | 현재 스냅샷 존재, unknown_keys 비어 있음 |
 | | pricing→listing_ready | Decision(가격) 저장, 프로필 pass/conditional, ReadinessItem 중 `blocks`에 해당 항목 done |
-| | listing_ready→live | Listing status=live ≥1 |
+| | listing_ready→live | 이 상품의 Listing status=live ≥1. live→paused 허용, paused→live는 live Listing 필요. 앞으로 갈 때는 새로 들어가는 단계의 조건만 검사 |
 | | 어디서든→on_hold/discontinued/rejected | 이유 필수, on_hold는 재검토일 필수 |
 | | 앞 단계로 | 이유만 있으면 허용 |
 | Order | 파생 기본, override 시 이유 | PLAN 7.2 |
@@ -218,6 +218,9 @@ I-11: `direction`은 `CostLineType.direction`과 일치해야 한다.
 | `order_evidence_missing` | completed인데 evidence 미완 | 증빙 첨부 | 3 | 4/4 |
 | `jobrun_failed_items` | retryable 실패 항목 존재 | 재처리 | 2 | 재처리 성공 |
 | `readiness_recheck` | ReadinessItem blocked, recheck_at 경과 | 재확인: {item} | 2 | 상태 변경 |
+| `product_needs_listing` | listing_ready/live인데 live Listing 없음 | 채널에 올리고 등록 상품 기록 | live면 1, 아니면 3 | live Listing 생성 |
+
+`profile_gate_unknown`·`costing_unknown`·`decide_business_model`은 `blocked`로 생성되며 사유·해제 조건·재확인일을 갖는다(PLAN 5.4).
 
 ## 5. 내보내기·가져오기
 

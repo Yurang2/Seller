@@ -82,7 +82,23 @@ it("M0 reasons required; overdue claims become one task and resolve when recheck
   const c = (await readClaims(b.DB)).find(
     (c) => c.field_key === "checkout_price",
   )!;
+  // 미확인 자리표시 값은 신선도 대상이 아니다. 값이 있는 추정 근거만 기한이 지나면 재확인 작업이 생긴다.
   await upsertClaim(b.DB, { ...c, recheck_by: "2020-01-01" }, "user");
+  await reconcileTasks(b.DB);
+  expect((await workspace(b.DB)).stale.some((s) => s.id === c.id)).toBe(false);
+  await upsertClaim(
+    b.DB,
+    {
+      ...c,
+      status: "estimated",
+      value_json: { amount_minor: 5990, currency: "CNY" },
+      source_type: "self_estimate",
+      source_ref: "테스트 가정",
+      checked_at: "2020-01-01T00:00:00Z",
+      recheck_by: "2020-01-01",
+    },
+    "user",
+  );
   await reconcileTasks(b.DB);
   await reconcileTasks(b.DB);
   expect((await workspace(b.DB)).stale.some((s) => s.id === c.id)).toBe(true);
@@ -94,7 +110,19 @@ it("M0 reasons required; overdue claims become one task and resolve when recheck
         t.status === "todo",
     ),
   ).toHaveLength(1);
-  await upsertClaim(b.DB, { ...c, recheck_by: "2099-01-01" }, "user");
+  await upsertClaim(
+    b.DB,
+    {
+      ...c,
+      status: "estimated",
+      value_json: { amount_minor: 5990, currency: "CNY" },
+      source_type: "self_estimate",
+      source_ref: "테스트 가정",
+      checked_at: "2020-01-01T00:00:00Z",
+      recheck_by: "2099-01-01",
+    },
+    "user",
+  );
   await reconcileTasks(b.DB);
   expect(
     (await listRecords(b.DB, "tasks")).find(

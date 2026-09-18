@@ -1,6 +1,6 @@
 import Big from "big.js";
 import type { Claim, ClaimStatus } from "./types/claim";
-import { weakest } from "./claim";
+import { weakest, daysBetween } from "./claim";
 export type CalcClaim = Pick<Claim, "kind" | "status" | "value_json"> &
   Partial<Claim>;
 export type CalcInput = {
@@ -14,7 +14,9 @@ export type CalcInput = {
     source: string;
     kind: string;
   } | null;
+  today?: string;
 };
+export const FX_MAX_AGE_DAYS = 1;
 export const requiredKeys = [
   "checkout_price",
   "parcel_items",
@@ -142,6 +144,8 @@ export function calculate(input: CalcInput) {
       outputs: null,
       lines: [],
       ranges: null,
+      fx_age_days: null as number | null,
+      notes: [] as string[],
     };
   const fx = input.fx ? new Big(input.fx.rate) : new Big(1);
   if (fx.lte(0)) throw new Error("환율은 0보다 커야 합니다.");
@@ -158,7 +162,11 @@ export function calculate(input: CalcInput) {
           : point(v);
     const currency = v?.currency;
     if (currency) {
-      if (c.kind === "money" && ["CNY", "USD"].includes(currency))
+      // money와 range 모두 최소 단위(CNY·USD는 1/100)로 저장된다. 단위 규칙은 형식과 무관하게 같다.
+      if (
+        ["money", "range"].includes(c.kind) &&
+        ["CNY", "USD"].includes(currency)
+      )
         r = div(r, point(100));
       if (currency !== "KRW") r = mul(r, point(fx));
     }
@@ -294,18 +302,32 @@ export function calculate(input: CalcInput) {
   const exact = run(false),
     hasRange = keys.some((k) => input.claims[k]?.kind === "range"),
     range = hasRange ? run(true) : null;
+  const fxUsed = !!input.fx && [...currencies].some((c) => c !== "KRW");
+  const fx_age_days =
+    fxUsed && input.today
+      ? daysBetween(input.fx!.as_of_date, input.today)
+      : null;
+  const fxStatus: ClaimStatus[] = fxUsed
+    ? [
+        input.fx!.kind === "manual" ||
+        (fx_age_days !== null && fx_age_days > FX_MAX_AGE_DAYS)
+          ? "estimated"
+          : "confirmed",
+      ]
+    : [];
   return {
     overall_status: weakest(
       ...keys.map((k) => input.claims[k]!.status),
-      ...(input.fx
-        ? [
-            input.fx.kind === "manual"
-              ? ("estimated" as const)
-              : ("confirmed" as const),
-          ]
-        : []),
+      ...fxStatus,
     ),
     unknown_keys: [],
+    fx_age_days,
+    notes:
+      fx_age_days !== null && fx_age_days > FX_MAX_AGE_DAYS
+        ? [
+            `환율 기준일이 ${fx_age_days}일 지났습니다. 새 환율을 기록하면 확인 상태가 됩니다.`,
+          ]
+        : [],
     outputs: Object.fromEntries(
       Object.entries(exact.values).map(([k, v]) => [
         k,

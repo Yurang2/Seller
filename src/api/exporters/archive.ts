@@ -37,6 +37,7 @@ const tables = [
   "channels",
   "readiness_items",
   "costings",
+  "listings",
 ] as const;
 type Table = (typeof tables)[number];
 type Row = Record<string, string | number | null>;

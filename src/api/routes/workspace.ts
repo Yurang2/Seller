@@ -11,7 +11,9 @@ import {
   saveRecord,
   getRecord,
   listRecords,
+  listDeleted,
   deleteRecord,
+  restoreRecord,
   fail,
 } from "../services/records";
 import {
@@ -31,8 +33,25 @@ workspaceRoutes.post("/seed", async (c) =>
   c.json(await seedResearch(c.env.DB)),
 );
 workspaceRoutes.get("/records/:type", async (c) =>
-  c.json({ data: await listRecords(c.env.DB, c.req.param("type")) }),
+  c.json({
+    data:
+      c.req.query("deleted") === "1"
+        ? await listDeleted(c.env.DB, c.req.param("type"))
+        : await listRecords(c.env.DB, c.req.param("type")),
+  }),
 );
+workspaceRoutes.post("/records/:type/:id/restore", async (c) => {
+  const { reason } = await c.req.json();
+  const data = await restoreRecord(
+    c.env.DB,
+    c.req.param("type"),
+    c.req.param("id"),
+    reason,
+    c.get("actor"),
+  );
+  await reconcileTasks(c.env.DB);
+  return c.json({ data });
+});
 workspaceRoutes.put("/records/:type", async (c) => {
   const { reason, ...data } = await c.req.json();
   const result = await saveRecord(
@@ -47,7 +66,13 @@ workspaceRoutes.put("/records/:type", async (c) => {
 });
 workspaceRoutes.delete("/records/:type/:id", async (c) => {
   const { reason } = await c.req.json();
-  await deleteRecord(c.env.DB, c.req.param("type"), c.req.param("id"), reason);
+  await deleteRecord(
+    c.env.DB,
+    c.req.param("type"),
+    c.req.param("id"),
+    reason,
+    c.get("actor"),
+  );
   await reconcileTasks(c.env.DB);
   return c.json({ deleted: true });
 });
@@ -97,7 +122,8 @@ workspaceRoutes.put("/settings", async (c) => {
       },
       reason,
     );
-  } else if (key === "mode_override") z.enum(["auto", "research"]).parse(value);
+  } else if (key === "mode_override")
+    z.enum(["auto", "research", "operations"]).parse(value);
   else if (key === "default_fx_source") z.string().parse(value);
   else if (key === "pii_retention_days")
     z.number().int().positive().parse(value);

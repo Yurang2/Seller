@@ -85,8 +85,8 @@ describe("skeleton acceptance: real D1/R2 bindings", () => {
     const form = new FormData();
     form.set(
       "file",
-      new File(["supplier quote evidence"], "quote.txt", {
-        type: "text/plain",
+      new File(["supplier quote evidence"], "quote.png", {
+        type: "image/png",
       }),
     );
     form.set("owner_type", "research");

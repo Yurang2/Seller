@@ -175,7 +175,13 @@ it("M1 complete input path: exact EX1 snapshot, gate review, pricing and price d
     currency,
   });
   const claims = await readClaims(b.DB);
-  const put = async (type: string, id: string, key: string, value: unknown) => {
+  const put = async (
+    type: string,
+    id: string,
+    key: string,
+    value: unknown,
+    extra: Record<string, unknown> = {},
+  ) => {
     const c = claims.find(
       (c) => c.owner_type === type && c.owner_id === id && c.field_key === key,
     )!;
@@ -188,11 +194,56 @@ it("M1 complete input path: exact EX1 snapshot, gate review, pricing and price d
         source_type: "self_estimate",
         source_ref: "CALC-EX1 가상 검증",
         checked_at: "2026-09-16T00:00:00Z",
+        ...extra,
       },
       "user",
     );
   };
-  await put("offers", s.offer_id, "checkout_price", money(5990, "CNY"));
+  const attach = async (
+    owner_type: string,
+    owner_id: string,
+    name = "capture.png",
+    type = "image/png",
+  ) => {
+    const fd = new FormData();
+    fd.set("file", new File(["EX1 test evidence"], name, { type }));
+    fd.set("owner_type", owner_type);
+    fd.set("owner_id", owner_id);
+    return (await saveAttachment(b, fd, "user")).id;
+  };
+  // 실결제가 근거에는 그 오퍼에 올린 캡처가 붙어야 확인이 된다. 다른 기록의 파일이나 텍스트 파일은 거부된다.
+  const otherOffer = (await listRecords(b.DB, "offers")).find(
+    (o) => o.id !== s.offer_id,
+  )!;
+  const foreign = await attach("offers", otherOffer.id);
+  await expect(
+    put("offers", s.offer_id, "checkout_price", money(5990, "CNY"), {
+      status: "confirmed",
+      source_type: "screenshot",
+      attachment_ids: [foreign],
+    }),
+  ).rejects.toThrow("이 기록에 올린 증빙");
+  const txt = await attach("offers", s.offer_id, "note.txt", "text/plain");
+  await expect(
+    put("offers", s.offer_id, "checkout_price", money(5990, "CNY"), {
+      status: "confirmed",
+      source_type: "screenshot",
+      attachment_ids: [txt],
+    }),
+  ).rejects.toThrow("캡처");
+  const capture = await attach("offers", s.offer_id);
+  const confirmedPrice = await put(
+    "offers",
+    s.offer_id,
+    "checkout_price",
+    money(5990, "CNY"),
+    {
+      status: "confirmed",
+      source_type: "screenshot",
+      attachment_ids: [capture],
+    },
+  );
+  expect(confirmedPrice.data.status).toBe("confirmed");
   for (const [k, v] of Object.entries({
     parcel_items: 4,
     duty: money(0),
@@ -227,19 +278,49 @@ it("M1 complete input path: exact EX1 snapshot, gate review, pricing and price d
       "cost",
       l.cost_code === "intl_shipping" ? money(4500, "CNY") : money(0),
     );
-  const fd = new FormData();
-  fd.set("file", new File(["EX1 test evidence"], "fixture.txt"));
-  fd.set("owner_type", "offers");
-  fd.set("owner_id", s.offer_id);
-  await saveAttachment(b, fd, "user");
-  for (const item of (await listRecords(b.DB, "requirement_items")).filter(
+  const items = (await listRecords(b.DB, "requirement_items")).filter(
     (i) => i.profile_id === p.profile_id,
-  )) {
+  );
+  // 위험도 높음 항목은 "직접 세운 가정"이나 추정 답변으로는 통과할 수 없다.
+  const high = items.find((i) => i.risk_level === "high")!;
+  await put("requirement_items", high.id, "answer", "내 생각에는 해당 없음");
+  await expect(
+    saveRecord(
+      b.DB,
+      "requirement_items",
+      { id: high.id, item_result: "pass", condition_text: "가정" },
+      "가상 판정",
+    ),
+  ).rejects.toThrow("확인 상태");
+  await put("requirement_items", high.id, "answer", "기관 회신: 해당 없음", {
+    status: "confirmed",
+    source_type: "document",
+  });
+  await expect(
+    saveRecord(
+      b.DB,
+      "requirement_items",
+      { id: high.id, item_result: "pass", condition_text: "회신" },
+      "가상 판정",
+    ),
+  ).rejects.toThrow("첨부");
+  for (const item of items) {
+    const evidence = await attach(
+      "requirement_items",
+      item.id,
+      "reply.pdf",
+      "application/pdf",
+    );
     await put(
       "requirement_items",
       item.id,
       "answer",
       "테스트 목적의 기관 회신 가정",
+      {
+        status: "confirmed",
+        source_type: "document",
+        attachment_ids: [evidence],
+      },
     );
     await saveRecord(
       b.DB,

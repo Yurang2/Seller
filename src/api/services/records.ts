@@ -4,6 +4,7 @@ import { catalog, requirementKeys, stages } from "../../domain/records/catalog";
 import { AppError } from "../errors";
 import { readClaims } from "../../db/repo/claims";
 import { defaultRecheck } from "../../domain/claim";
+import { moneySchema } from "../../domain/types/claim";
 export type Row = Record<string, any>;
 export const today = () =>
   new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -16,31 +17,18 @@ export function definition(type: string) {
   return d;
 }
 export const primary = (type: string) => "id";
-export function decode(row: Row | null): Row | null {
+export function decode(row: Row | null, type?: string): Row | null {
   if (!row) return null;
+  const fields = type ? (catalog[type]?.fields ?? {}) : {};
+  const jsonKeys = new Set(
+    Object.entries(fields)
+      .filter(([, f]) => f.type === "json")
+      .map(([k]) => k),
+  );
   return Object.fromEntries(
     Object.entries(row).map(([k, v]) => [
       k,
-      typeof v === "string" &&
-      (k.endsWith("_json") ||
-        [
-          "competitor_refs",
-          "images",
-          "contact_channels",
-          "payment_methods",
-          "attachment_ids",
-          "weight_bands",
-          "warnings",
-          "includes",
-          "policies",
-          "depends_on",
-          "evidence",
-          "blocks",
-          "inputs_frozen",
-          "lines",
-          "outputs",
-          "unknown_keys",
-        ].includes(k))
+      typeof v === "string" && (k.endsWith("_json") || jsonKeys.has(k))
         ? JSON.parse(v)
         : v,
     ]),
@@ -54,7 +42,7 @@ export async function listRecords(db: D1Database, type: string) {
         `SELECT * FROM ${type}${type === "fx_rates" ? "" : " WHERE deleted_at IS NULL"} ORDER BY ${type === "tasks" ? "priority, " : ""}created_at DESC`,
       )
       .all<Row>()
-  ).results.map((r) => decode(r)!);
+  ).results.map((r) => decode(r, type)!);
 }
 export async function getRecord(db: D1Database, type: string, id: string) {
   definition(type);
@@ -65,6 +53,7 @@ export async function getRecord(db: D1Database, type: string, id: string) {
       )
       .bind(id)
       .first<Row>(),
+    type,
   );
 }
 export function audit(
@@ -184,6 +173,30 @@ export function validateRecord(
     !out.rejection_reason?.trim()
   )
     fail("탈락 이유가 필요합니다.");
+  if (type === "listings") {
+    for (const key of ["listed_price", "customer_shipping_fee"])
+      if (out[key] !== null) {
+        const m = moneySchema.safeParse(out[key]);
+        if (!m.success || m.data.currency !== "KRW")
+          fail(
+            "등록 판매가·청구 배송비는 {amount_minor, currency: 'KRW'} 형식입니다.",
+          );
+      }
+    if (out.status === "live") {
+      if (!out.external_id?.trim() && !out.url?.trim())
+        fail(
+          "판매 중 등록에는 채널 상품 번호 또는 상품 페이지 URL이 필요합니다.",
+        );
+      if (out.listed_price === null)
+        fail("판매 중 등록에는 등록 판매가가 필요합니다.");
+      if (out.assets_source === "unknown")
+        fail(
+          "상세페이지 이미지 출처가 미확인이면 판매 중으로 바꿀 수 없습니다. 직접 촬영 또는 사용 허락을 기록하세요.",
+        );
+      if (!out.last_verified_at)
+        fail("판매 중 등록에는 채널에서 실제 노출을 확인한 날짜가 필요합니다.");
+    }
+  }
   return out;
 }
 export async function saveRecord(
@@ -285,6 +298,40 @@ export async function saveRecord(
     const o = await getRecord(db, "offers", values.offer_id);
     if (o?.product_id !== values.product_id) fail("다른 상품의 오퍼입니다.");
   }
+  if (type === "listings") {
+    const p = (await getRecord(db, "products", values.product_id))!;
+    if (values.variant_id) {
+      const v = await getRecord(db, "product_variants", values.variant_id);
+      if (v?.product_id !== values.product_id) fail("다른 상품의 옵션입니다.");
+    }
+    if (values.costing_id) {
+      const cst = await getRecord(db, "costings", values.costing_id);
+      if (cst?.product_id !== values.product_id)
+        fail("다른 상품의 원가 스냅샷입니다.");
+    }
+    if (values.status === "live") {
+      if (!["listing_ready", "live", "paused"].includes(p.status))
+        fail(
+          "상품이 등록 준비 단계에 도달해야 판매 중으로 기록할 수 있습니다. 현재: " +
+            p.status,
+        );
+      const decided = (await readClaims(db)).find(
+        (c) =>
+          c.owner_type === "products" &&
+          c.owner_id === p.id &&
+          c.field_key === "decided_price",
+      );
+      const decidedMinor = (decided?.value_json as Row | null)?.amount_minor;
+      if (
+        decided?.status !== "unknown" &&
+        decidedMinor != null &&
+        values.listed_price?.amount_minor !== decidedMinor
+      )
+        fail(
+          `등록 판매가가 결정 판매가(${decidedMinor}원)와 다릅니다. 가격 결정을 다시 기록한 뒤 등록하세요.`,
+        );
+    }
+  }
   if (type === "requirement_items" && values.item_result !== "unknown") {
     const answer = (await readClaims(db)).find(
       (c) =>
@@ -294,6 +341,34 @@ export async function saveRecord(
       fail("먼저 답변 Claim에 근거와 확인 상태를 저장하세요.");
     if (answer.source_type === "competitor_observation")
       fail("경쟁사 관찰만으로 요건 판정을 할 수 없습니다.");
+    // 통과·조건부는 "근거의 질"을 본다. 규칙의 형식만 지키고 실질을 우회하지 못하게 한다.
+    if (["pass", "conditional"].includes(values.item_result)) {
+      const evidenceLinks = await db
+        .prepare(
+          "SELECT id FROM links WHERE deleted_at IS NULL AND relation='evidence_for' AND ((to_type='requirement_items' AND to_id=?) OR (from_type='requirement_items' AND from_id=?)) LIMIT 1",
+        )
+        .bind(id, id)
+        .first();
+      const hasEvidence = answer.attachment_ids.length > 0 || !!evidenceLinks;
+      if (values.risk_level === "high") {
+        if (answer.status !== "confirmed")
+          fail(
+            "위험도 높음 항목은 확인 상태의 답변(기관 회신·법령·권리자 자료)이 있어야 통과·조건부로 판정할 수 있습니다.",
+          );
+        if (!hasEvidence)
+          fail(
+            "위험도 높음 항목의 통과·조건부 판정에는 첨부 파일 또는 근거로 연결된 기록(evidence_for)이 필요합니다.",
+          );
+      }
+      if (
+        answer.source_type === "self_estimate" &&
+        values.item_result === "pass" &&
+        values.risk_level !== "low"
+      )
+        fail(
+          "직접 세운 가정만으로는 통과 판정을 할 수 없습니다. 조건부로 기록하거나 외부 근거를 첨부하세요.",
+        );
+    }
   }
   if (type === "readiness_items" && values.status === "done") {
     if (values.key === "backup_verified" && !internal)
@@ -497,11 +572,67 @@ export async function refreshWarnings(
       actor,
     );
 }
+export async function listDeleted(db: D1Database, type: string) {
+  definition(type);
+  if (type === "fx_rates") return [];
+  return (
+    await db
+      .prepare(
+        `SELECT * FROM ${type} WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 200`,
+      )
+      .all<Row>()
+  ).results.map((r) => decode(r, type)!);
+}
+export async function restoreRecord(
+  db: D1Database,
+  type: string,
+  id: string,
+  reason: string,
+  actor = "user",
+) {
+  if (!reason?.trim()) fail("복구 이유가 필요합니다.");
+  const def = definition(type);
+  const row = decode(
+    await db
+      .prepare(`SELECT * FROM ${type} WHERE id=? AND deleted_at IS NOT NULL`)
+      .bind(id)
+      .first<Row>(),
+    type,
+  );
+  if (!row) fail("삭제된 기록이 아닙니다.");
+  for (const [key, f] of Object.entries(def.fields))
+    if (f.ref && row[key] && !(await getRecord(db, f.ref, row[key])))
+      fail(
+        `${f.label} 연결 대상이 삭제돼 있어 먼저 그 기록을 복구해야 합니다.`,
+      );
+  const at = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare(`UPDATE ${type} SET deleted_at=NULL, updated_at=? WHERE id=?`)
+      .bind(at, id),
+    audit(
+      db,
+      type,
+      id,
+      row,
+      { ...row, deleted_at: null },
+      reason,
+      actor,
+      "restore",
+    ),
+  ]);
+  if (type === "shipping_legs")
+    await refreshWarnings(db, row.scenario_id, actor);
+  if (type === "requirement_items")
+    await refreshGate(db, row.profile_id, actor);
+  return { ...row, deleted_at: null };
+}
 export async function deleteRecord(
   db: D1Database,
   type: string,
   id: string,
   reason: string,
+  actor = "user",
 ) {
   if (!reason?.trim()) fail("삭제 이유가 필요합니다.");
   const before = await getRecord(db, type, id);
@@ -535,7 +666,7 @@ export async function deleteRecord(
       before,
       { ...before, deleted_at: at },
       reason,
-      "user",
+      actor,
       "delete",
     ),
   ]);

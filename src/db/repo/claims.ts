@@ -7,6 +7,7 @@ import {
   activity_log,
 } from "../schema";
 import type { Claim } from "../../domain/types/claim";
+import { needsAttachment, evidenceMimeOk } from "../../domain/claim";
 import { ulid } from "ulid";
 import type { BatchItem } from "drizzle-orm/batch";
 
@@ -26,13 +27,29 @@ export async function readClaims(db: D1Database) {
 export async function findClaim(db: D1Database, id: string) {
   return (await readClaims(db)).find((c) => c.id === id);
 }
-export async function validAttachments(db: D1Database, ids: string[]) {
+// 첨부는 "존재"만으로는 근거가 아니다. 같은 기록에 올린 파일이어야 하고, 가격·견적은 캡처(이미지)나 PDF여야 한다.
+export async function attachmentProblem(
+  db: D1Database,
+  claim: Pick<
+    Claim,
+    "owner_type" | "owner_id" | "field_key" | "kind" | "attachment_ids"
+  >,
+) {
+  if (!claim.attachment_ids.length) return null;
   const orm = drizzle(db);
   const rows = await orm
     .select()
     .from(attachments)
     .where(isNull(attachments.deleted_at));
-  return ids.every((id) => rows.some((r) => r.id === id));
+  for (const id of claim.attachment_ids) {
+    const a = rows.find((r) => r.id === id);
+    if (!a) return "실제로 저장된 증빙 파일만 연결할 수 있습니다.";
+    if (a.owner_type !== claim.owner_type || a.owner_id !== claim.owner_id)
+      return "이 기록에 올린 증빙만 연결할 수 있습니다. 다른 기록의 파일은 이 값의 근거가 되지 않습니다.";
+    if (needsAttachment(claim) && !evidenceMimeOk(a.mime))
+      return "가격·견적·세율 증빙은 화면 캡처(이미지) 또는 PDF여야 합니다.";
+  }
+  return null;
 }
 export async function persistClaim(
   db: D1Database,

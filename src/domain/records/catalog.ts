@@ -406,6 +406,33 @@ export const catalog: Record<string, Definition> = {
       blocks: j("차단 단계"),
     },
   },
+  listings: {
+    label: "채널 등록 상품",
+    fields: {
+      channel_id: r("판매 채널", "channels", true),
+      product_id: r("상품", "products", true),
+      variant_id: r("옵션", "product_variants"),
+      external_id: t("채널 상품 번호"),
+      url: t("상품 페이지 URL"),
+      listed_price: {
+        ...j("등록 판매가 {amount_minor, currency}", null),
+        label: "등록 판매가 (KRW)",
+      },
+      customer_shipping_fee: {
+        ...j("등록 청구 배송비", null),
+        label: "등록 청구 배송비 (KRW)",
+      },
+      disclosures: j("고지 문구", {}),
+      assets_source: e(
+        "상세페이지 이미지 출처",
+        "unknown|own_photo|licensed|seller_provided_with_permission",
+      ),
+      status: e("등록 상태", "draft|live|paused|ended"),
+      last_verified_at: { ...t("마지막 확인일"), type: "date" },
+      costing_id: r("등록 시점 원가 스냅샷", "costings"),
+      notes: l("메모"),
+    },
+  },
   costings: {
     label: "원가 스냅샷",
     fields: {
@@ -499,6 +526,15 @@ export const labels: Record<string, string> = {
   competitor_observation: "경쟁사 관찰",
   meeting: "대화",
   journal: "일지",
+  draft: "등록 준비",
+  ended: "등록 종료",
+  own_photo: "직접 촬영",
+  licensed: "사용 허락 받음",
+  seller_provided_with_permission: "판매자 제공(허락)",
+  domestic_wholesale: "국내 정식 도매",
+  hybrid: "혼합",
+  undecided: "미결정",
+  unknown_source: "출처 미확인",
 };
 export const claimLabels: Record<string, string> = {
   rights_holder: "권리자",

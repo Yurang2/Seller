@@ -1,5 +1,5 @@
 import { normalizeClaim } from "../../domain/claim";
-import { persistClaim, validAttachments } from "../../db/repo/claims";
+import { persistClaim, attachmentProblem } from "../../db/repo/claims";
 import { AppError } from "../errors";
 import { getRecord, patchManaged, refreshGate, fail } from "./records";
 import { catalog } from "../../domain/records/catalog";
@@ -37,12 +37,8 @@ export async function upsertClaim(
     if (!allowed.includes(claim.kind))
       fail("이 항목의 값 형식이 맞지 않습니다: " + allowed.join(", "));
   }
-  if (!(await validAttachments(db, claim.attachment_ids)))
-    throw new AppError(
-      400,
-      "INVALID_ATTACHMENT",
-      "실제로 저장된 증빙 파일만 연결할 수 있습니다.",
-    );
+  const problem = await attachmentProblem(db, claim);
+  if (problem) throw new AppError(400, "INVALID_ATTACHMENT", problem);
   const record = await persistClaim(
     db,
     claim,

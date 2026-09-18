@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { inspectCostingInputs } from "../../src/domain/costing";
+import { calculate } from "../../src/domain/calculate";
+import { fixture } from "./calculator.test";
 import { validateCostDirection } from "../../src/domain/costLineTypes";
 import { normalizeClaim, weakest } from "../../src/domain/claim";
 const input = {
@@ -29,19 +30,18 @@ describe("R-01~05 and 5,900원 regression", () => {
     ).not.toThrow();
   });
   it("unknown input blocks all numeric outputs; absent claim also blocks", () => {
-    const known = normalizeClaim(input).claim;
-    const unknown = normalizeClaim({
+    const f = fixture();
+    f.claims.checkout_price = normalizeClaim({
       ...input,
       status: "unknown",
       value_json: null,
     }).claim;
-    expect(
-      inspectCostingInputs({ goods: known, shipping: unknown, fx: null }),
-    ).toEqual({
-      overallStatus: "unknown",
-      unknownKeys: ["shipping", "fx"],
-      outputs: null,
-    });
+    delete f.claims["leg:2"];
+    const r = calculate(f);
+    expect(r.outputs).toBeNull();
+    expect(r.unknown_keys).toEqual(
+      expect.arrayContaining(["checkout_price", "leg:2"]),
+    );
   });
   it("zero is a value and unknown cannot secretly contain zero", () => {
     expect(() =>

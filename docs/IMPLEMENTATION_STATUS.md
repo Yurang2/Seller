@@ -1,4 +1,4 @@
-# 구현 상태 · 2026-09-16
+# 구현 상태 · 2026-09-18 (검토 반영 + M2)
 
 기준: `Yurang2/Seller`, `claude/hopeful-wright-olq2lc`.
 읽은 순서: README 구현자 안내 → PLAN → DATA_MODEL → ARCHITECTURE → SEED_RESEARCH → RESEARCH_SHEET.
@@ -77,3 +77,13 @@ Vite와 마이그레이션 스크립트는 같은 값을 사용한다. 기본값
 3. 사업 모델, 상품 권리·안전 요건, 실제 견적·환율 등 미결정 정보는 사용자 조사·판단으로 채운다. 샘플 계산값을 실제 견적으로 자동 입력하지 않는다.
 
 사용 흐름과 로컬 실행·백업 방법은 `LOCAL_GUIDE.md`를 참고한다.
+
+## 2026-09-18 갱신 · 검토 보고(REVIEW_2026-09-18.md) 반영과 M2
+
+- P1: 요건 판정 근거 강도(위험도 높음 → 확인 답변 + 첨부/링크, 가정 답변으로 통과 불가), 첨부 소유자·유형 검증(같은 기록의 이미지·PDF만), 조사→원가확인은 실결제가 근거의 캡처 필요. `tests/api/m1.test.ts`가 실패 경로를 검증한다.
+- P2: 범위 금액도 최소 단위 규칙 적용, 환율 기준일 1일 초과 시 결과 추정 강등(`fx_age_days`, 안내 문구), 미확인 자리표시 값은 신선도·재확인 작업 대상에서 제외, 엑셀 가져오기가 무시한 상품 열을 "안내" 행으로 보고.
+- P3: 홈에 막힘 상세(사유·경과일·해제 조건·재확인일), 다음 행동 10개, 가장 오래 머문 상품, 판매 개시까지 남은 것, 돈(스냅샷 예상), 모드 표시. 채널 화면에 "연동 안 됨 + 수동 절차 링크" 배너. wrangler cron 제거. 소프트 삭제 복구(API·UI). 삭제된 소유자의 근거는 목록에서 숨김.
+- P4: `Foundation.tsx`·`domain/costing.ts` 삭제. DATA_MODEL·PLAN·DECISIONS(IMP-04~07) 동기화.
+- M2: `listings` 테이블(0003_listings.sql)·기록 화면, 판매 중 조건(채널 상품 번호·결정 판매가 일치·이미지 출처·노출 확인일), 상품 `listing_ready→live`, `live↔paused`, 파생 작업 `product_needs_listing`, 수동 절차 SOP 2종 자동 생성, 운영 모드 판정. `tests/api/m2.test.ts`.
+- 검증: `pnpm typecheck`, `pnpm test`(도메인 46 + Workers API 16), `pnpm build`, 로컬 화면 확인.
+- 여전히 없는 것: Cloudflare 원격 배포·Access 검증(보류), 주문·정산(M3), 외부 연동(M4).

@@ -274,6 +274,25 @@ export async function researchImport(
       });
       continue;
     }
+    const ignored = (
+      [
+        ["G", "상태"],
+        ["I", "선택오퍼ID"],
+        ["J", "선택시나리오ID"],
+        ["K", "결정판매가"],
+        ["L", "결정청구배송비"],
+      ] as const
+    )
+      .filter(([col]) => r[col] != null && String(r[col]).trim() !== "")
+      .map(([, name]) => name);
+    if (ignored.length)
+      results.push({
+        sheet: "상품",
+        row,
+        external_id: r.A,
+        status: "notice",
+        message: `${ignored.join("·")} 열은 가져오지 않았습니다. 단계 변경·오퍼 선택·가격 결정은 이유를 남겨야 하는 규칙이라 화면에서 처리합니다.`,
+      });
     add(
       "상품",
       row,

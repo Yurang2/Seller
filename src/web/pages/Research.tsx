@@ -24,8 +24,70 @@ export function ResearchRecords() {
         <ProductTools id={id} />
       ) : type === "costings" && id ? (
         <Snapshot id={id} />
+      ) : type === "channels" && id ? (
+        <ChannelTools id={id} />
       ) : null}
     </Records>
+  );
+}
+function ChannelTools({ id }: { id: string }) {
+  const q = useWorkspace();
+  const d = q.data,
+    ch = d?.records.channels.find((c) => c.id === id);
+  if (!d || !ch) return null;
+  const sop = (key: string) => d.records.sops.find((s) => s.key === key);
+  const listings = (d.records.listings ?? []).filter(
+    (l) => l.channel_id === id,
+  );
+  return (
+    <>
+      {ch.integration_state !== "api" && (
+        <div className="alert" role="status">
+          <strong>연동 안 됨 · {label(ch.integration_state ?? "none")}</strong>{" "}
+          이 채널과 주고받는 자료는 모두 사람이 옮깁니다. 절차:{" "}
+          {sop("listing_manual") ? (
+            <Link to={recordUrl("sops", sop("listing_manual")!.id)}>
+              상품 올리기(수동)
+            </Link>
+          ) : (
+            "상품 올리기(수동) 절차 없음"
+          )}
+          {" · "}
+          {sop("orders_manual") ? (
+            <Link to={recordUrl("sops", sop("orders_manual")!.id)}>
+              주문 처리(수동)
+            </Link>
+          ) : (
+            "주문 처리(수동) 절차 없음"
+          )}
+          . API 연동은 자동화 단계(M4)에서 붙습니다.
+        </div>
+      )}
+      <section className="panel">
+        <div className="section-head">
+          <h2>이 채널의 등록 상품</h2>
+          <Link className="button secondary" to={recordUrl("listings")}>
+            등록 상품 기록 →
+          </Link>
+        </div>
+        {listings.length ? (
+          <ul className="plain-list">
+            {listings.map((l) => (
+              <li key={l.id}>
+                <Link to={recordUrl("listings", l.id)}>
+                  <Badge value={l.status} />{" "}
+                  {d.records.products.find((p) => p.id === l.product_id)
+                    ?.name ?? l.product_id}
+                  {l.external_id && ` · ${l.external_id}`}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">아직 이 채널에 등록한 상품 기록이 없습니다.</p>
+        )}
+      </section>
+    </>
   );
 }
 function ProductTools({ id }: { id: string }) {
@@ -96,6 +158,7 @@ function ProductTools({ id }: { id: string }) {
             "costing",
             "pricing",
             "listing_ready",
+            "live",
           ].map((s, i) => (
             <div className={p.status === s ? "current" : ""} key={s}>
               <small>0{i + 1}</small>
@@ -132,7 +195,7 @@ function ProductTools({ id }: { id: string }) {
                 onChange={(e) => setStatus(e.target.value)}
               >
                 {stages
-                  .filter((s) => !["live", "paused"].includes(s))
+                  .filter((s) => s !== "paused" || p.status === "live")
                   .map((s) => (
                     <option key={s} value={s}>
                       {label(s)}
@@ -177,6 +240,56 @@ function ProductTools({ id }: { id: string }) {
           </Link>
         </div>
       </section>
+      {["listing_ready", "live", "paused"].includes(p.status) && (
+        <section className="panel">
+          <div className="section-head">
+            <h2>채널 등록</h2>
+            <Link className="button secondary" to={recordUrl("listings")}>
+              + 등록 상품 기록
+            </Link>
+          </div>
+          <p className="muted">
+            채널에 실제로 올린 뒤 채널 상품 번호·노출 확인일·이미지 출처를
+            기록하고 상태를 판매 중으로 바꿉니다. 등록 판매가는 결정 판매가와
+            같아야 합니다.{" "}
+            {d.records.sops.find((s) => s.key === "listing_manual") && (
+              <Link
+                to={recordUrl(
+                  "sops",
+                  d.records.sops.find((s) => s.key === "listing_manual")!.id,
+                )}
+              >
+                절차 보기 →
+              </Link>
+            )}
+          </p>
+          {(d.records.listings ?? []).filter((l) => l.product_id === p.id)
+            .length ? (
+            <ul className="plain-list">
+              {(d.records.listings ?? [])
+                .filter((l) => l.product_id === p.id)
+                .map((l) => (
+                  <li key={l.id}>
+                    <Link to={recordUrl("listings", l.id)}>
+                      <Badge value={l.status} />{" "}
+                      {
+                        d.records.channels.find((c) => c.id === l.channel_id)
+                          ?.name
+                      }
+                      {l.external_id && ` · ${l.external_id}`}
+                      {l.listed_price &&
+                        ` · ${Number(l.listed_price.amount_minor).toLocaleString("ko-KR")}원`}
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <p className="empty">
+              등록 상품 기록이 없습니다. 판매 중으로 가려면 하나가 필요합니다.
+            </p>
+          )}
+        </section>
+      )}
       <Calculator product={p} data={d} />
       {p.status === "pricing" && (
         <section className="panel">

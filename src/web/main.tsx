@@ -26,6 +26,7 @@ createRoot(document.getElementById("root")!).render(
               <NavLink to="/records/compliance_profiles">◇　판매 요건</NavLink>
               <NavLink to="/records/suppliers">↗　공급처·견적</NavLink>
               <NavLink to="/records/shipping_scenarios">⇄　배송 비교</NavLink>
+              <NavLink to="/records/channels">◫　채널·등록 상품</NavLink>
               <span className="nav-label">기억하고 이어가기</span>
               <NavLink to="/records/tasks">☑　할 일·막힘</NavLink>
               <NavLink to="/records/notes">▤　지식 노트</NavLink>

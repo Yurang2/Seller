@@ -12,6 +12,7 @@ import {
   patchManaged,
   fail,
   audit,
+  today,
   type Row,
 } from "./records";
 import { reconcileTasks } from "./workspace";
@@ -79,6 +80,7 @@ export async function costingInput(
     claims,
     legs: legs.map((l) => ({ id: l.id, code: l.cost_code, basis: l.basis })),
     fx: fx as CalcInput["fx"],
+    today: today(),
   };
 }
 const requestSchema = z.object({
@@ -179,9 +181,12 @@ export async function snapshotChanged(db: D1Database, id: string) {
     s.channel_id,
     s.fx_rate_id,
   );
+  const strip = ({ today: _t, ...rest }: Row) => rest;
   return {
     data: s,
-    changed: JSON.stringify(current) !== JSON.stringify(s.inputs_frozen),
+    changed:
+      JSON.stringify(strip(current)) !==
+      JSON.stringify(strip(s.inputs_frozen ?? {})),
   };
 }
 export async function transitionProduct(
@@ -199,52 +204,65 @@ export async function transitionProduct(
   const p = await getRecord(db, "products", id);
   if (!p) fail("상품이 없습니다.");
   if (status === p.status) return p;
-  if (["live", "paused"].includes(status))
-    fail("판매 등록·운영 단계는 후속 M2에서 연결합니다.");
   if (status === "on_hold" && !recheck_at)
     fail("보류에는 재검토 날짜가 필요합니다.");
-  const special = ["on_hold", "rejected", "discontinued"].includes(status),
+  if (status === "paused" && p.status !== "live")
+    fail("일시정지는 판매 중인 상품에만 적용합니다.");
+  if (
+    p.status === "paused" &&
+    !["live", "listing_ready", "discontinued", "on_hold"].includes(status)
+  )
+    fail("일시정지 상품은 판매 재개, 등록 준비 복귀, 종료만 가능합니다.");
+  const special = ["on_hold", "rejected", "discontinued", "paused"].includes(
+      status,
+    ),
     order = [
       "discovered",
       "researching",
       "costing",
       "pricing",
       "listing_ready",
+      "live",
     ];
   const current = order.indexOf(p.status),
     target = order.indexOf(status);
-  if (!special && target > current) {
+  if (status === "live" && p.status === "paused") {
+    // 판매 재개: 판매 중 등록 상품이 하나는 있어야 한다.
+    const live = (await listRecords(db, "listings")).some(
+      (l) => l.product_id === id && l.status === "live",
+    );
+    if (!live)
+      fail(
+        "판매 중 상태의 채널 등록 상품이 없습니다. 등록 상품을 먼저 판매 중으로 기록하세요.",
+      );
+  } else if (!special && target > current) {
     if (target > current + 1 && current >= 0)
       fail("단계별 요건을 확인하며 순서대로 진행하세요.");
     if (!p.character_id || !p.category || !p.profile_id)
       fail("캐릭터·카테고리·판매 요건 프로필을 먼저 연결하세요.");
     const profile = await getRecord(db, "compliance_profiles", p.profile_id);
     if (!profile) fail("판매 요건 프로필이 없습니다.");
-    if (target >= 2) {
+    if (target >= 2 && current < 2) {
       const offers = (await listRecords(db, "offers")).filter(
         (o) => o.product_id === id && o.status !== "rejected",
       );
       const claims = await readClaims(db);
-      const attached = (
-        await db
-          .prepare(
-            "SELECT owner_id FROM attachments WHERE owner_type='offers' AND deleted_at IS NULL",
-          )
-          .all<Row>()
-      ).results;
+      // "첨부가 있는 오퍼"란 실결제가 근거 자체에 캡처가 붙은 오퍼다. 무관한 파일 하나로는 통과하지 못한다.
       if (
-        !offers.some(
-          (o) =>
-            attached.some((a) => a.owner_id === o.id) ||
-            claims.some(
-              (c) =>
-                c.owner_type === "offers" &&
-                c.owner_id === o.id &&
-                c.attachment_ids.length,
-            ),
+        !offers.some((o) =>
+          claims.some(
+            (c) =>
+              c.owner_type === "offers" &&
+              c.owner_id === o.id &&
+              c.field_key === "checkout_price" &&
+              c.status !== "unknown" &&
+              c.attachment_ids.length > 0,
+          ),
         )
       )
-        fail("실제 증빙이 첨부된 오퍼가 필요합니다.");
+        fail(
+          "실결제가 근거에 캡처·PDF 증빙이 첨부된 오퍼가 하나는 필요합니다. 오퍼의 실결제가 근거에 결제 화면 캡처를 올리세요.",
+        );
       if (
         !(await listRecords(db, "shipping_scenarios")).some(
           (s) => s.product_id === id,
@@ -257,7 +275,7 @@ export async function transitionProduct(
             (profile.gate_reason || "요건 판정을 확인하세요."),
         );
     }
-    if (target >= 3) {
+    if (target >= 3 && current < 3) {
       if (!["pass", "conditional"].includes(profile.gate_result))
         fail(
           "가격 결정 전 판매 요건이 통과 또는 조건부여야 합니다. 현재: " +
@@ -271,7 +289,7 @@ export async function transitionProduct(
       if ((await snapshotChanged(db, s.id)).changed)
         fail("현재 값과 원가 스냅샷이 다릅니다. 다시 계산·저장하세요.");
     }
-    if (target >= 4) {
+    if (target >= 4 && current < 4) {
       const model = await db
         .prepare("SELECT value_json FROM settings WHERE key='business_model'")
         .first<Row>();
@@ -286,6 +304,15 @@ export async function transitionProduct(
       );
       if (incomplete.length)
         fail("사업 준비 미완료: " + incomplete.map((r) => r.title).join(", "));
+    }
+    if (target >= 5 && current < 5) {
+      const live = (await listRecords(db, "listings")).filter(
+        (l) => l.product_id === id && l.status === "live",
+      );
+      if (!live.length)
+        fail(
+          "판매 중으로 바꾸려면 채널 등록 상품 기록이 '판매 중' 상태여야 합니다. 채널에 실제로 올린 뒤 등록 상품을 기록하세요.",
+        );
     }
   }
   const r = await patchManaged(

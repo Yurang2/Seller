@@ -36,6 +36,9 @@ export const title = (r: Row) =>
   r.question ||
   r.option_desc ||
   r.carrier_or_service ||
+  (r.assets_source !== undefined
+    ? `채널 등록 상품${r.external_id ? " · " + r.external_id : ""}`
+    : null) ||
   r.url ||
   (r.base_currency
     ? `${r.base_currency} · ${r.as_of_date}`
@@ -107,16 +110,55 @@ export function Home() {
         <p>사업 기록을 불러오는 중…</p>
       </main>
     );
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const daysSince = (iso?: string | null) =>
+    iso
+      ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86400000))
+      : 0;
   const tasks = d.records.tasks.filter(
     (t) => !["done", "cancelled"].includes(t.status),
   );
-  const blockers = tasks.filter((t) => t.priority === 1);
+  const blockers = tasks
+    .filter((t) => t.status === "blocked")
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+  const nextActions = tasks
+    .filter((t) => t.status !== "blocked")
+    .sort(
+      (a, b) =>
+        a.priority - b.priority ||
+        (a.due_at ?? "9").localeCompare(b.due_at ?? "9") ||
+        (a.created_at ?? "").localeCompare(b.created_at ?? ""),
+    )
+    .slice(0, 10);
   const readiness = d.records.readiness_items;
+  const readinessOpen = readiness.filter(
+    (r) => !["done", "not_applicable"].includes(r.status),
+  );
   const products = d.records.products;
+  const listings = d.records.listings ?? [];
+  const liveListings = listings.filter((l) => l.status === "live");
+  const oldest = products
+    .filter((p) => !["live", "discontinued", "rejected"].includes(p.status))
+    .map((p) => ({ p, days: daysSince(p.stage_entered_at ?? p.created_at) }))
+    .sort((a, b) => b.days - a.days)
+    .slice(0, 3);
+  const snapshots = (d.records.costings ?? [])
+    .filter((c) => c.is_current === 1 && c.outputs)
+    .map((c) => ({
+      c,
+      product: products.find((p) => p.id === c.product_id),
+    }));
+  const wonInt = (x: unknown) =>
+    x == null ? "미확인" : Math.round(Number(x)).toLocaleString("ko-KR") + "원";
+  const taskLink = (t: Row) =>
+    recordUrl(
+      t.entity_type && catalog[t.entity_type] ? t.entity_type : "tasks",
+      t.entity_type && catalog[t.entity_type] ? t.entity_id : t.id,
+    );
   return (
     <main className="page">
       <PageHead
-        eyebrow="WORKSPACE / 오늘의 흐름"
+        eyebrow={`WORKSPACE / ${d.mode === "operations" ? "운영 모드" : "조사 모드"}`}
         title="사용자님, 여기서 이어가세요."
         description="조사한 근거와 결정한 이유를 한곳에. 다음에 할 일을 놓치지 않도록."
       />
@@ -139,7 +181,11 @@ export function Home() {
         <div className="metric">
           <span>조사 중인 상품</span>
           <strong>
-            {products.length}
+            {
+              products.filter(
+                (p) => !["live", "discontinued", "rejected"].includes(p.status),
+              ).length
+            }
             <small>개</small>
           </strong>
           <Link to={recordUrl("products")}>상품 조사 보기 →</Link>
@@ -155,11 +201,7 @@ export function Home() {
         <div className="metric">
           <span>사업 준비</span>
           <strong>
-            {
-              readiness.filter((r) =>
-                ["done", "not_applicable"].includes(r.status),
-              ).length
-            }
+            {readiness.length - readinessOpen.length}
             <small> / {readiness.length}</small>
           </strong>
           <Link to={recordUrl("readiness_items")}>준비 체크리스트 →</Link>
@@ -176,56 +218,53 @@ export function Home() {
       <div className="home-columns">
         <section className="panel">
           <div className="section-head">
-            <h2>지금 필요한 결정</h2>
-            <span className="kicker">PRIORITY 01</span>
+            <h2>무엇이 막혀 있나</h2>
+            <span className="kicker">오래된 순</span>
           </div>
-          {d.settings.business_model === "undecided" ||
-          !d.settings.business_model ? (
-            <div className="blocker">
-              <Badge value="blocked" />
-              <h3>D-01 · 어떤 방식으로 판매할까요?</h3>
-              <p>
-                구매대행·수입판매·혼합·국내 정식 도매에 따라 통관, 반품, 증빙
-                기준이 달라집니다. 조사 기록은 계속 쌓을 수 있습니다.
-              </p>
-              <Link className="button" to="/settings">
-                사업 모델 검토하기
+          {!blockers.length && <p className="empty">막힌 일이 없습니다.</p>}
+          {blockers.map((t) => (
+            <div className="blocker" key={t.id}>
+              <Badge value="blocked" />{" "}
+              <small>
+                {daysSince(t.created_at)}일째 ·{" "}
+                {label(t.blocked_kind ?? "internal")} 대기
+                {t.recheck_at && ` · 재확인 ${t.recheck_at}`}
+                {t.recheck_at && t.recheck_at < todayStr && " (기한 지남)"}
+              </small>
+              <h3>{t.title}</h3>
+              <p>{t.blocked_reason}</p>
+              {t.unblock_condition && (
+                <p>
+                  <strong>풀리는 조건:</strong> {t.unblock_condition}
+                </p>
+              )}
+              <Link className="button" to={taskLink(t)}>
+                {t.rule_key === "decide_business_model"
+                  ? "사업 모델 검토하기"
+                  : "연결된 기록 열기"}
               </Link>
             </div>
-          ) : (
-            <p>
-              선택한 사업 모델:{" "}
-              <strong>{label(d.settings.business_model)}</strong>
-            </p>
-          )}
+          ))}
           <div className="section-head">
             <h2>다음 행동</h2>
             <Link to={recordUrl("tasks")}>전체 보기</Link>
           </div>
-          {tasks.slice(0, 3).map((t, i) => (
-            <Link
-              className="action-row"
-              key={t.id}
-              to={recordUrl(
-                t.entity_type && catalog[t.entity_type]
-                  ? t.entity_type
-                  : "tasks",
-                t.entity_type && catalog[t.entity_type] ? t.entity_id : t.id,
-              )}
-            >
-              <span className="step-number">0{i + 1}</span>
+          {nextActions.map((t, i) => (
+            <Link className="action-row" key={t.id} to={taskLink(t)}>
+              <span className="step-number">
+                {String(i + 1).padStart(2, "0")}
+              </span>
               <span>
                 <strong>{t.title}</strong>
                 <small>
-                  {t.blocked_reason ??
-                    t.detail ??
+                  {t.detail ??
                     "연결된 기록에서 확인하고 다음 단계로 진행하세요."}
                 </small>
               </span>
               <span>↗</span>
             </Link>
           ))}
-          {!tasks.length && (
+          {!nextActions.length && (
             <p className="empty">현재 열린 할 일이 없습니다.</p>
           )}
         </section>
@@ -259,15 +298,110 @@ export function Home() {
               <br />첫 기록을 남기면 여기에 이어서 표시됩니다.
             </div>
           )}
+          <h2>가장 오래 머문 상품</h2>
+          {oldest.map(({ p, days }) => (
+            <Link
+              className="action-row"
+              key={p.id}
+              to={recordUrl("products", p.id)}
+            >
+              <span className="step-number">{days}일</span>
+              <span>
+                <strong>{p.name}</strong>
+                <small>{label(p.status)} 단계</small>
+              </span>
+              <span>↗</span>
+            </Link>
+          ))}
+          {!oldest.length && (
+            <p className="empty">진행 중인 상품이 없습니다.</p>
+          )}
           <div className="honest-state">
             <span className="status-dot" /> 연동된 자동화 없음
             <br />
-            <small>현재는 수동 기록과 계산 규칙만 동작합니다.</small>
+            <small>
+              현재는 수동 기록과 계산 규칙만 동작합니다. 채널 등록·주문은{" "}
+              <Link to={recordUrl("sops")}>수동 절차</Link>를 따릅니다.
+            </small>
           </div>
         </section>
       </div>
+      <div className="home-columns">
+        <section className="panel">
+          <div className="section-head">
+            <h2>판매 개시까지 남은 것</h2>
+            <Link to={recordUrl("readiness_items")}>체크리스트 →</Link>
+          </div>
+          {readinessOpen.length ? (
+            <ul className="plain-list">
+              {readinessOpen.slice(0, 6).map((r) => (
+                <li key={r.id}>
+                  <Link to={recordUrl("readiness_items", r.id)}>
+                    <Badge value={r.status} /> {r.title}
+                  </Link>
+                </li>
+              ))}
+              {readinessOpen.length > 6 && (
+                <li className="muted">외 {readinessOpen.length - 6}개</li>
+              )}
+            </ul>
+          ) : (
+            <p>필수 사업 준비를 모두 마쳤습니다.</p>
+          )}
+          <p className="muted">
+            등록 준비 단계 상품{" "}
+            {products.filter((p) => p.status === "listing_ready").length}개 ·
+            판매 중 상품 {products.filter((p) => p.status === "live").length}개
+            · 채널 등록 {liveListings.length}건 판매 중
+          </p>
+        </section>
+        <section className="panel">
+          <div className="section-head">
+            <h2>돈</h2>
+            <span className="kicker">
+              {d.mode === "operations" ? "실거래 기록 전" : "조사 예상만"}
+            </span>
+          </div>
+          <p className="muted">
+            실제 거래 기록은 아직 없습니다(주문·정산 기능은 다음 단계). 아래는
+            저장된 원가 스냅샷의 개당 예상입니다.
+          </p>
+          {snapshots.length ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>상품</th>
+                    <th>개당 착지원가</th>
+                    <th>개당 공헌이익</th>
+                    <th>상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshots.map(({ c, product }) => (
+                    <tr key={c.id}>
+                      <td>
+                        <Link to={recordUrl("costings", c.id)}>
+                          {product?.name ?? c.product_id}
+                        </Link>
+                      </td>
+                      <td>{wonInt(c.outputs?.landed_per_unit)}</td>
+                      <td>{wonInt(c.outputs?.contribution_per_unit)}</td>
+                      <td>
+                        <Badge value={c.overall_status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="empty">완성된 원가 스냅샷이 아직 없습니다.</p>
+          )}
+        </section>
+      </div>
       <section className="panel">
-        <h2>상품이 판매 준비에 이르는 흐름</h2>
+        <h2>상품이 판매에 이르는 흐름</h2>
         <div className="pipeline">
           {[
             "discovered",
@@ -275,6 +409,7 @@ export function Home() {
             "costing",
             "pricing",
             "listing_ready",
+            "live",
           ].map((s, i) => (
             <Link to={recordUrl("products")} key={s}>
               <small>0{i + 1}</small>
@@ -531,21 +666,46 @@ function StructuredInput({
         placeholder="항목을 한 줄에 하나씩 적어주세요."
       />
     );
+  if (field.label.includes("(KRW)"))
+    return (
+      <input
+        type="number"
+        min={0}
+        value={value?.amount_minor ?? ""}
+        onChange={(e) =>
+          onChange(
+            e.target.value === ""
+              ? null
+              : { amount_minor: Number(e.target.value), currency: "KRW" },
+          )
+        }
+        placeholder="원 단위 정수. 모르면 비움"
+      />
+    );
   const object = value && typeof value === "object" ? value : {};
   const keys =
-    field.label === "정책"
+    field.label === "고지 문구"
       ? [
-          "shipping_fee_policy",
-          "return_policy_text",
           "purchase_agency_notice",
           "random_notice",
+          "origin_notice",
+          "return_notice",
         ]
-      : ["note"];
+      : field.label === "정책"
+        ? [
+            "shipping_fee_policy",
+            "return_policy_text",
+            "purchase_agency_notice",
+            "random_notice",
+          ]
+        : ["note"];
   const names: Row = {
     shipping_fee_policy: "배송비 정책",
     return_policy_text: "반품 정책",
     purchase_agency_notice: "구매대행 고지",
     random_notice: "랜덤 상품 고지",
+    origin_notice: "원산지·수입자 표기",
+    return_notice: "반품·교환 고지",
     note: "내용",
   };
   return (
@@ -872,7 +1032,7 @@ export function ClaimEditor({
               {kind === "percent"
                 ? "(%)"
                 : kind === "range"
-                  ? "({min, likely, max, currency?})"
+                  ? "({min, likely, max, currency?} · 금액은 최소 단위: CNY·USD는 1/100, KRW는 원)"
                   : ""}
               {kind === "bool" ? (
                 <select
@@ -1080,7 +1240,8 @@ export function Records({ children }: { children?: React.ReactNode }) {
       ["suppliers", "offers", "supplier_messages"],
       ["shipping_scenarios", "shipping_legs", "forwarders", "rate_cards"],
       ["notes", "decisions", "links", "sops"],
-      ["readiness_items", "channels", "fx_rates"],
+      ["channels", "listings", "sops"],
+      ["readiness_items", "fx_rates"],
     ].find((g) => g.includes(type)) ?? [];
   const claims = record
     ? d.claims.filter((c) => c.owner_type === type && c.owner_id === record.id)
@@ -1217,6 +1378,7 @@ export function Records({ children }: { children?: React.ReactNode }) {
               아직 기록이 없습니다. 새 기록을 만들어 시작하세요.
             </div>
           )}
+          {!["fx_rates", "costings"].includes(type) && <Trash type={type} />}
         </>
       ) : (
         <>
@@ -1380,6 +1542,60 @@ export function Records({ children }: { children?: React.ReactNode }) {
     </main>
   );
 }
+function Trash({ type }: { type: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false),
+    [reason, setReason] = useState(""),
+    [error, setError] = useState("");
+  const q = useQuery({
+    queryKey: ["deleted", type],
+    queryFn: () => api<{ data: Row[] }>(`/records/${type}?deleted=1`),
+    enabled: open,
+  });
+  async function restore(id: string) {
+    try {
+      await api(`/records/${type}/${id}/restore`, jsonBody("POST", { reason }));
+      await qc.invalidateQueries();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  return (
+    <details
+      className="panel"
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary>삭제된 기록 보기·복구</summary>
+      <p className="muted">
+        삭제는 되돌릴 수 있습니다. 복구에도 이유가 남습니다.
+      </p>
+      <ErrorBox error={error} />
+      <input
+        aria-label="복구 이유"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="복구 이유"
+      />
+      {q.data?.data.length === 0 && (
+        <p className="empty">삭제된 기록이 없습니다.</p>
+      )}
+      {q.data?.data.map((r) => (
+        <div className="history-row" key={r.id}>
+          <strong>{title(r)}</strong>
+          <small>삭제 {r.deleted_at?.slice(0, 10)}</small>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!reason.trim()}
+            onClick={() => restore(r.id)}
+          >
+            복구
+          </button>
+        </div>
+      ))}
+    </details>
+  );
+}
 function ProductBoard({ products }: { products: Row[] }) {
   const stages = [
     "discovered",
@@ -1387,6 +1603,8 @@ function ProductBoard({ products }: { products: Row[] }) {
     "costing",
     "pricing",
     "listing_ready",
+    "live",
+    "paused",
     "on_hold",
     "rejected",
     "discontinued",
@@ -1394,7 +1612,7 @@ function ProductBoard({ products }: { products: Row[] }) {
   return (
     <div className="product-board">
       {stages
-        .filter((s, i) => i < 5 || products.some((p) => p.status === s))
+        .filter((s, i) => i < 6 || products.some((p) => p.status === s))
         .map((s, i) => (
           <section className="board-column" key={s}>
             <div className="section-head">
@@ -1408,6 +1626,7 @@ function ProductBoard({ products }: { products: Row[] }) {
                 "배송비·환율·손익 비교",
                 "근거를 남기고 가격 결정",
                 "필수 사업 준비 마무리",
+                "채널에 올리고 등록 상품 기록",
               ][i] ?? "이유와 재검토 조건 보관"}
             </p>
             {products
@@ -1605,8 +1824,14 @@ export function Claims() {
         {q.data?.claims
           .filter(
             (c) =>
+              !catalog[c.owner_type] ||
+              q.data?.records[c.owner_type]?.some((r) => r.id === c.owner_id),
+          )
+          .filter(
+            (c) =>
               !staleOnly ||
-              c.recheck_by < new Date().toISOString().slice(0, 10),
+              (c.status !== "unknown" &&
+                c.recheck_by < new Date().toISOString().slice(0, 10)),
           )
           .map((c) => (
             <button
@@ -1726,6 +1951,7 @@ export function ResearchImport() {
                               applied: "적용됨",
                               failed: "실패",
                               skipped: "제외",
+                              notice: "안내",
                             } as Row
                           )[r.status]
                         }

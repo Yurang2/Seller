@@ -75,15 +75,29 @@ it("shipping money is never the customer shipping income, and direct vs forwarde
   expect(calculate(direct).outputs?.landed_per_unit).toBe("13889.11");
   expect(calculate(f).outputs?.landed_per_unit).toBe("14607.86");
 });
-it("range gives conservative bounds and unknown FX currency blocks output", () => {
+it("range uses the same minor-unit rule as money, gives conservative bounds, and unknown FX currency blocks output", () => {
   const f = fixture();
+  // CNY 40.00 ~ 50.00 은 최소 단위(1/100)로 4000 ~ 5000 이다. money 4500 과 likely 4500 은 같은 결과여야 한다.
   f.claims["leg:2"] = c(
-    { min: 40, likely: 45, max: 50, currency: "CNY" },
+    { min: 4000, likely: 4500, max: 5000, currency: "CNY" },
     "range",
   );
   const r = calculate(f);
+  expect(r.outputs?.landed_per_unit).toBe("14607.86");
   expect(Number(r.ranges?.contribution_per_unit.min)).toBeLessThan(9356.14);
   expect(Number(r.ranges?.contribution_per_unit.max)).toBeGreaterThan(9356.14);
   f.fx!.base_currency = "TWD";
   expect(calculate(f).unknown_keys).toContain("fx:CNY");
+});
+it("stale FX degrades a confirmed calculation to estimated and says why", () => {
+  const f = fixture();
+  for (const k of Object.keys(f.claims)) f.claims[k]!.status = "confirmed";
+  f.fx!.kind = "reference";
+  f.today = "2026-09-02";
+  expect(calculate(f).overall_status).toBe("confirmed");
+  f.today = "2026-09-05";
+  const r = calculate(f);
+  expect(r.overall_status).toBe("estimated");
+  expect(r.fx_age_days).toBe(4);
+  expect(r.notes[0]).toContain("환율 기준일");
 });

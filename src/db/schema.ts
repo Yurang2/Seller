@@ -848,3 +848,46 @@ export const costings = sqliteTable(
     index("idx_costings_decision_id").on(t.decision_id),
   ],
 );
+export const listings = sqliteTable(
+  "listings",
+  {
+    id: text("id").primaryKey(),
+    channel_id: text("channel_id")
+      .references((): AnySQLiteColumn => channels.id)
+      .notNull(),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    variant_id: text("variant_id").references(
+      (): AnySQLiteColumn => product_variants.id,
+    ),
+    external_id: text("external_id"),
+    url: text("url"),
+    listed_price: text("listed_price"),
+    customer_shipping_fee: text("customer_shipping_fee"),
+    disclosures: text("disclosures"),
+    assets_source: text("assets_source"),
+    status: text("status"),
+    last_verified_at: text("last_verified_at"),
+    costing_id: text("costing_id").references(
+      (): AnySQLiteColumn => costings.id,
+    ),
+    notes: text("notes"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_listings_channel_id").on(t.channel_id),
+    index("idx_listings_product_id").on(t.product_id),
+    index("idx_listings_costing_id").on(t.costing_id),
+    check(
+      "listings_assets_source_enum",
+      sql`assets_source IN ('unknown','own_photo','licensed','seller_provided_with_permission')`,
+    ),
+    check(
+      "listings_status_enum",
+      sql`status IN ('draft','live','paused','ended')`,
+    ),
+  ],
+);

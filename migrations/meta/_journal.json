@@ -15,6 +15,13 @@
       "when": 1789560762588,
       "tag": "0002_research",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789741695387,
+      "tag": "0003_listings",
+      "breakpoints": true
     }
   ]
 }
