@@ -3,6 +3,7 @@ import { catalog, claimLabels } from "../../domain/records/catalog";
 import { costLineTypes } from "../../domain/costLineTypes";
 import { readClaims } from "../../db/repo/claims";
 import { isStale } from "../../domain/claim";
+import { gradeProduct, type GradeResult } from "../../domain/grade";
 import {
   saveRecord,
   listRecords,
@@ -490,12 +491,37 @@ export async function workspace(db: D1Database) {
         (seen.add(a.entity_type + ":" + a.entity_id), true),
     )
     .slice(0, 3);
+  const grades: Record<string, GradeResult> = {};
+  for (const p of records.products)
+    grades[p.id] = gradeProduct({
+      product: p as any,
+      profile:
+        (records.compliance_profiles.find(
+          (r) => r.id === p.profile_id,
+        ) as any) ?? null,
+      items: records.requirement_items.filter(
+        (i) => i.profile_id === p.profile_id,
+      ) as any,
+      openTasks: records.tasks.filter(
+        (t) =>
+          !["done", "cancelled"].includes(t.status) &&
+          ((t.entity_type === "products" && t.entity_id === p.id) ||
+            (t.entity_type === "compliance_profiles" &&
+              t.entity_id === p.profile_id) ||
+            (t.entity_type === "costings" &&
+              t.entity_id === p.current_costing_id)),
+      ) as any,
+      costing: (p.current_costing_id
+        ? records.costings.find((c) => c.id === p.current_costing_id)
+        : null) as any,
+    });
   return {
     records,
     claims,
     settings,
     activity,
     recent,
+    grades,
     stale: claims.filter(
       (c) =>
         isStale(c, today()) &&

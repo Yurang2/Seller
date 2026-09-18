@@ -12,6 +12,7 @@ import {
   ErrorBox,
   ClaimEditor,
   ClaimValue,
+  GradeBadge,
   type Row,
   type WorkspaceData,
 } from "./Workspace";
@@ -167,6 +168,25 @@ function ProductTools({ id }: { id: string }) {
             </div>
           ))}
         </div>
+        {d.grades?.[p.id] && (
+          <div className="alert" role="status">
+            <GradeBadge
+              grade={d.grades[p.id].grade}
+              estimated={d.grades[p.id].estimated}
+            />
+            <ul className="plain-list">
+              {d.grades[p.id].reasons.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+            {!!d.grades[p.id].next.length && (
+              <p>
+                <strong>등급을 올리려면:</strong>{" "}
+                {d.grades[p.id].next.join(" → ")}
+              </p>
+            )}
+          </div>
+        )}
         <p>
           판매 요건: <Badge value={profile?.gate_result ?? "unknown"} />{" "}
           {profile && (

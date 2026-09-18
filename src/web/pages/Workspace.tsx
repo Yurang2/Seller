@@ -21,7 +21,42 @@ export type WorkspaceData = {
   cost_line_types: Row[];
   automation: string;
   mode: string;
+  grades: Record<
+    string,
+    {
+      grade: string;
+      estimated: boolean;
+      reasons: string[];
+      next: string[];
+      margin_rate: number | null;
+    }
+  >;
 };
+export function GradeBadge({
+  grade,
+  estimated,
+}: {
+  grade: string;
+  estimated?: boolean;
+}) {
+  const cls =
+    grade === "A"
+      ? "confirmed"
+      : grade === "B"
+        ? "estimated"
+        : grade === "D"
+          ? "fail"
+          : "unknown";
+  return (
+    <span
+      className={`badge ${cls}`}
+      title="종합 등급: 요건 → 남은 조치 → 수익성 순으로 판정"
+    >
+      등급 {grade}
+      {estimated ? " (추정)" : ""}
+    </span>
+  );
+}
 export function useWorkspace() {
   return useQuery({
     queryKey: ["workspace"],
@@ -1339,7 +1374,7 @@ export function Records({ children }: { children?: React.ReactNode }) {
             <span className="muted">{filtered.length}개 표시</span>
           </div>
           {type === "products" ? (
-            <ProductBoard products={filtered} />
+            <ProductBoard products={filtered} grades={d.grades} />
           ) : (
             <div className="record-grid">
               {filtered.map((r) => (
@@ -1596,7 +1631,24 @@ function Trash({ type }: { type: string }) {
     </details>
   );
 }
-function ProductBoard({ products }: { products: Row[] }) {
+function ProductBoard({
+  products,
+  grades,
+}: {
+  products: Row[];
+  grades: WorkspaceData["grades"];
+}) {
+  const order: Record<string, number> = {
+    A: 0,
+    B: 1,
+    C: 2,
+    D: 4,
+    "판정 불가": 3,
+  };
+  const sorted = [...products].sort(
+    (a, b) =>
+      (order[grades[a.id]?.grade] ?? 9) - (order[grades[b.id]?.grade] ?? 9),
+  );
   const stages = [
     "discovered",
     "researching",
@@ -1629,7 +1681,7 @@ function ProductBoard({ products }: { products: Row[] }) {
                 "채널에 올리고 등록 상품 기록",
               ][i] ?? "이유와 재검토 조건 보관"}
             </p>
-            {products
+            {sorted
               .filter((p) => p.status === s)
               .map((p) => (
                 <Link
@@ -1641,6 +1693,15 @@ function ProductBoard({ products }: { products: Row[] }) {
                     {label(p.category)} · {label(p.option_scheme)}
                   </small>
                   <h3>{p.name}</h3>
+                  {grades[p.id] && (
+                    <p>
+                      <GradeBadge
+                        grade={grades[p.id].grade}
+                        estimated={grades[p.id].estimated}
+                      />{" "}
+                      <small>{grades[p.id].reasons[0]}</small>
+                    </p>
+                  )}
                   <p>{p.notes}</p>
                   <span>기록과 다음 행동 →</span>
                 </Link>
