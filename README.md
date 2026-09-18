@@ -28,14 +28,14 @@ pnpm build
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                         | 기술 구조 설계(D-05). 스택, 저장소 구조, wrangler 설정, M0 스키마 SQL, 인증, API 규약, 백업·복원, 골격 완료 정의                               | 구현자         |
 | [docs/RESEARCH_SHEET.md](docs/RESEARCH_SHEET.md)                     | 조사 시트(엑셀) 열 구조와 데이터 모델 대응표                                                                                                   | 사용자, 구현자 |
 | [templates/research_template.xlsx](templates/research_template.xlsx) | 조사 시트 템플릿. 초기 조사 데이터가 들어 있고, 원가 계산 탭은 미확인 값을 0으로 계산하지 않는다                                               | 사용자         |
-| [docs/PLAN_NEXT.md](docs/PLAN_NEXT.md) | 다음 단계 계획(2026-09-18): 데스크톱 앱 포장(A) → 표 화면·사용자 정의 열(B) → Cloudflare(C), 가격 감시 메모(D). Astra 6 지시문 포함 | 구현자 |
+| [docs/PLAN_NEXT.md](docs/PLAN_NEXT.md) | 다음 단계 계획 v2(2026-09-19): Cloudflare 배포·Access(C) → 모바일 핵심 작업(M) → 표 화면·사용자 정의 열(B). 데스크톱(A) 보류. Astra 6 지시문 포함 | 구현자 |
 | [docs/REVIEW_2026-09-18.md](docs/REVIEW_2026-09-18.md) | M0·M1 구현 검토 보고와 반영 결과 | 사용자, 구현자 |
 
 ## 구현자(Astra 6 / Codex CLI) 안내
 
 1. 읽는 순서: `docs/PLAN.md` → `docs/DATA_MODEL.md` → `docs/SEED_RESEARCH.md`.
 2. `PLAN.md` 3장의 구현 규칙 **R-01 ~ R-14는 협상 대상이 아닙니다.** 특히 "미확인 금액을 0으로 계산하지 않는다", "연동되지 않은 자동화를 동작하는 것처럼 보이게 하지 않는다"는 어떤 화면에서도 지켜야 합니다.
-3. M0·M1·M2는 구현됐습니다(검토 반영 완료). 다음 작업은 `docs/PLAN_NEXT.md`의 트랙 A(데스크톱 앱 포장)부터입니다. 주문·자동화(M3·M4)는 그 뒤입니다.
+3. M0·M1·M2는 구현됐습니다(검토 반영 완료). 다음 작업은 `docs/PLAN_NEXT.md` v2의 트랙 C(Cloudflare 배포·Access)부터입니다. 데스크톱(트랙 A)은 보류입니다. 주문·자동화(M3·M4)는 그 뒤입니다.
 4. 기존 웹 골격은 없습니다. `docs/ARCHITECTURE.md`대로 골격을 만들고, 12장 "골격 완료" 정의 6개를 채운 뒤 M0에 들어갑니다.
 5. 문서와 다르게 만들어야 할 이유가 생기면 코드에 조용히 반영하지 말고 `docs/DECISIONS.md`(없으면 생성)에 "제안 → 근거 → 대안"으로 남기고 사용자 확인을 받습니다.
 6. 사용자를 부를 때는 이름 대신 "사용자님"으로 부릅니다.
