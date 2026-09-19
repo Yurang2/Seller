@@ -76,11 +76,22 @@ export async function costingInput(
     claims["leg:" + l.id] = find("shipping_legs", l.id, "cost");
   const fx = fxId ? await getRecord(db, "fx_rates", fxId) : null;
   if (fxId && !fx) fail("저장한 환율이 없습니다.");
+  // D-01 사업 모델과 USD 환율(있으면)은 계산 방식(세금 부담·150달러 기준)을 바꾼다.
+  const model = await db
+    .prepare("SELECT value_json FROM settings WHERE key='business_model'")
+    .first<Row>();
+  const usd = (await listRecords(db, "fx_rates"))
+    .filter((r) => r.base_currency === "USD")
+    .sort((a, b) =>
+      String(b.as_of_date).localeCompare(String(a.as_of_date)),
+    )[0];
   return {
     claims,
     legs: legs.map((l) => ({ id: l.id, code: l.cost_code, basis: l.basis })),
     fx: fx as CalcInput["fx"],
     today: today(),
+    businessModel: model ? JSON.parse(model.value_json) : null,
+    usdKrw: usd ? Number(usd.rate) : null,
   };
 }
 const requestSchema = z.object({

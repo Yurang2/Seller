@@ -15,7 +15,13 @@ export type CalcInput = {
     kind: string;
   } | null;
   today?: string;
+  // D-01 사업 모델. purchase_agency(구매대행)면 관·부가세는 수취인(소비자) 부담이라 판매자 원가에서 뺀다.
+  businessModel?: string | null;
+  // 미화 150달러 목록통관 기준을 원화로 판정하기 위한 USD 환율(선택). 없으면 경고만 일반 문구로 남긴다.
+  usdKrw?: number | null;
 };
+export const PURCHASE_AGENCY = "purchase_agency";
+export const LIST_CLEARANCE_USD = 150;
 export const FX_MAX_AGE_DAYS = 1;
 export const requiredKeys = [
   "checkout_price",
@@ -139,6 +145,7 @@ export function calculate(input: CalcInput) {
   }
   if (unknown_keys.length)
     return {
+      mode: input.businessModel ?? "unknown",
       overall_status: "unknown" as ClaimStatus,
       unknown_keys,
       outputs: null,
@@ -190,7 +197,12 @@ export function calculate(input: CalcInput) {
       order = v("items_per_order");
     const goods = mul(v("checkout_price"), add(one, v("payment_fx_fee")));
     let shipping = point(0);
-    const lines: { code: string; amount: Interval; status: ClaimStatus }[] = [
+    const lines: {
+      code: string;
+      amount: Interval;
+      status: ClaimStatus;
+      payer?: "me" | "customer";
+    }[] = [
       {
         code: "goods_cost",
         amount: v("checkout_price"),
@@ -224,7 +236,10 @@ export function calculate(input: CalcInput) {
         : div(v(key), q);
     const duty = tax("duty", add(goods, shipping)),
       vat = tax("vat", add(add(goods, shipping), duty));
-    const transport = add(shipping, add(duty, vat)),
+    const agency = input.businessModel === PURCHASE_AGENCY;
+    // 구매대행: 세금은 소비자 명의 통관에서 소비자가 낸다. 판매자 착지원가에는 넣지 않고 참고 라인으로만 남긴다.
+    const customerTax = agency ? add(duty, vat) : point(0);
+    const transport = agency ? shipping : add(shipping, add(duty, vat)),
       landed = add(add(goods, transport), v("inspection_packaging"));
     const sale = v("sale_price"),
       customerShipping = div(v("customer_shipping_fee"), order),
@@ -245,8 +260,18 @@ export function calculate(input: CalcInput) {
     if (denom.lo.lte(0))
       throw new Error("판매·결제·반품 비율 합계는 100% 미만이어야 합니다.");
     lines.push(
-      { code: "customs_duty", amount: duty, status: input.claims.duty!.status },
-      { code: "customs_vat", amount: vat, status: input.claims.vat!.status },
+      {
+        code: "customs_duty",
+        amount: duty,
+        status: input.claims.duty!.status,
+        payer: agency ? "customer" : "me",
+      },
+      {
+        code: "customs_vat",
+        amount: vat,
+        status: input.claims.vat!.status,
+        payer: agency ? "customer" : "me",
+      },
       {
         code: "inspection_packaging",
         amount: v("inspection_packaging"),
@@ -291,6 +316,7 @@ export function calculate(input: CalcInput) {
         contribution_per_unit: contribution,
         margin_rate: div(contribution, income),
         net_est_per_unit: net,
+        customer_tax_per_unit: customerTax,
         breakeven_price: div(
           sub(add(landed, mul(feeShipping, feeRate)), customerShipping),
           denom,
@@ -315,19 +341,39 @@ export function calculate(input: CalcInput) {
           : "confirmed",
       ]
     : [];
+  const notes: string[] = [];
+  if (fx_age_days !== null && fx_age_days > FX_MAX_AGE_DAYS)
+    notes.push(
+      `환율 기준일이 ${fx_age_days}일 지났습니다. 새 환율을 기록하면 확인 상태가 됩니다.`,
+    );
+  const agency = input.businessModel === PURCHASE_AGENCY;
+  if (agency) {
+    const tax = exact.values.customer_tax_per_unit.lo;
+    notes.push(
+      `구매대행: 관·부가세는 수취인(소비자) 부담이라 착지원가에서 뺐습니다(참고 ${tax.toFixed(0)}원/개). 반송비·통관 지연 응대는 반품 충당률로 감안하세요.`,
+    );
+    // 목록통관 기준(미화 150달러)은 소비자 결제액이 아니라 물품가격 기준이지만, 합산과세·고가 옵션을 걸러내기 위해 판매가로 보수적으로 본다.
+    const income = exact.values.income_per_unit.hi;
+    if (input.usdKrw && input.usdKrw > 0) {
+      const usd = income.div(input.usdKrw);
+      if (usd.gt(LIST_CLEARANCE_USD))
+        notes.push(
+          `소비자 결제액이 미화 ${usd.toFixed(0)}달러로 목록통관 기준 ${LIST_CLEARANCE_USD}달러를 넘습니다. 일반통관·과세 가능성과 합산과세를 고지·설계하세요.`,
+        );
+    } else
+      notes.push(
+        "미화 150달러 목록통관 기준 판정에는 USD 환율 기록이 필요합니다(설정·환율).",
+      );
+  }
   return {
+    mode: agency ? PURCHASE_AGENCY : (input.businessModel ?? "unknown"),
     overall_status: weakest(
       ...keys.map((k) => input.claims[k]!.status),
       ...fxStatus,
     ),
     unknown_keys: [],
     fx_age_days,
-    notes:
-      fx_age_days !== null && fx_age_days > FX_MAX_AGE_DAYS
-        ? [
-            `환율 기준일이 ${fx_age_days}일 지났습니다. 새 환율을 기록하면 확인 상태가 됩니다.`,
-          ]
-        : [],
+    notes,
     outputs: Object.fromEntries(
       Object.entries(exact.values).map(([k, v]) => [
         k,
@@ -338,6 +384,7 @@ export function calculate(input: CalcInput) {
       code: l.code,
       per_unit_minor: l.amount.lo.toFixed(2),
       status: l.status,
+      payer: l.payer ?? "me",
     })),
     ranges: range
       ? Object.fromEntries(

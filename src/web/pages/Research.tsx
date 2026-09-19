@@ -479,6 +479,16 @@ function CostResult({ result }: { result: Row }) {
         </div>
       </div>
       <Badge value={result.overall_status} />
+      {result.mode === "purchase_agency" && (
+        <span className="badge" style={{ marginLeft: 6 }}>
+          구매대행 · 세금 소비자 부담
+        </span>
+      )}
+      {(result.notes ?? []).map((n: string) => (
+        <p className="muted" key={n}>
+          · {n}
+        </p>
+      ))}
       <p className="muted">
         공헌이익에서 월 광고비·고정비를 배분한 순이익 추정:{" "}
         {won(result.outputs.net_est_per_unit)} · 손익분기 판매가{" "}
@@ -739,7 +749,15 @@ function Calculator({
                           {d.cost_line_types.find((t) => t.code === l.code)
                             ?.name ?? l.code}
                         </td>
-                        <td>{won(l.per_unit_minor)}</td>
+                        <td>
+                          {won(l.per_unit_minor)}
+                          {l.payer === "customer" && (
+                            <span className="muted">
+                              {" "}
+                              · 소비자 부담(원가 제외)
+                            </span>
+                          )}
+                        </td>
                         <td>
                           <Badge value={l.status} />
                         </td>
