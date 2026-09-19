@@ -22,6 +22,7 @@ export type WorkspaceData = {
   cost_line_types: Row[];
   automation: string;
   mode: string;
+  last_digest?: (Row & { summary: Row | null }) | null;
   grades: Record<
     string,
     {
@@ -272,7 +273,11 @@ export function Home() {
         <Link className="kpi" to="/claims">
           <span>재확인 기한 지남</span>
           <strong>{d.stale.length}개</strong>
-          <small>근거 재확인 대상</small>
+          <small>
+            {d.last_digest?.summary
+              ? `아침 요약 ${d.last_digest.summary.date} · 이메일 ${label(d.last_digest.summary.email)}`
+              : "아침 요약 아직 없음(매일 08:00 집계)"}
+          </small>
         </Link>
         <Link className="kpi" to={recordUrl("products")}>
           <span>상품</span>
@@ -1370,7 +1375,7 @@ export function Records({ children }: { children?: React.ReactNode }) {
       ["suppliers", "offers", "supplier_messages"],
       ["shipping_scenarios", "shipping_legs", "forwarders", "rate_cards"],
       ["notes", "decisions", "links", "sops"],
-      ["channels", "listings", "sops"],
+      ["channels", "listings", "orders", "sops"],
       ["readiness_items", "fx_rates"],
     ].find((g) => g.includes(type)) ?? [];
   const claims = record

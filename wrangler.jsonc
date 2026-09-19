@@ -21,11 +21,13 @@
     { "binding": "ATTACHMENTS", "bucket_name": "seller-attachments" },
     { "binding": "BACKUPS", "bucket_name": "seller-backups" },
   ],
-  // Cron Triggers는 M4(자동화)에서 Job 실행기와 함께 추가한다. 실행 코드 없는 스케줄은 두지 않는다(R-10).
+  // 매일 08:00 KST(23:00 UTC) 재확인 요약 Job. 실행 코드: src/api/jobs/digest.ts (R-10: 코드 없는 스케줄은 두지 않는다).
+  "triggers": { "crons": ["0 23 * * *"] },
   "vars": {
     "APP_ENV": "production",
     "AUTH_MODE": "passphrase",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
+    "DIGEST_EMAIL": "",
   },
 }

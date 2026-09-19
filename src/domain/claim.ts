@@ -28,6 +28,8 @@ const EXTERNAL_EVIDENCE: Record<string, RegExp> = {
   channel: /_rate$/,
   products: /^$/,
   product: /^$/,
+  orders: /paid|settlement|refund/,
+  order: /paid|settlement|refund/,
 };
 export function needsAttachment(
   c: Pick<Claim, "field_key" | "owner_type"> & { kind?: Claim["kind"] },

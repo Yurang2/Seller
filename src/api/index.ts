@@ -9,6 +9,7 @@ import { saveAttachment } from "./services/attachments";
 import { exportArchive, restoreArchive } from "./exporters/archive";
 import { workspaceRoutes } from "./routes/workspace";
 import { researchRoutes } from "./routes/research";
+import { runDailyDigest } from "./jobs/digest";
 import { authRoutes } from "./passphrase";
 const app = new Hono<AppEnv>();
 // 로그인 관련 경로는 인증 없이 열리되, 다른 출처 차단(아래 Origin 검사)은 그대로 받는다.
@@ -145,6 +146,9 @@ app.post("/api/v1/import", async (c) => {
 app.route("/api/v1", authRoutes);
 app.route("/api/v1", workspaceRoutes);
 app.route("/api/v1", researchRoutes);
+app.post("/api/v1/jobs/daily-digest/run", async (c) =>
+  c.json({ data: await runDailyDigest(c.env) }),
+);
 app.notFound((c) =>
   c.json(
     {
@@ -200,7 +204,8 @@ app.onError((err, c) => {
 });
 export default {
   fetch: app.fetch,
-  scheduled: async (_event: ScheduledController, _env: Env) => {
-    // ARCHITECTURE §8: no Jobs in the skeleton/M0. Do not report any sync/backup success.
+  scheduled: async (_event: ScheduledController, env: Env) => {
+    // 매일 08:00 KST: 재확인 요약(집계·기록·선택적 이메일). 데이터는 바꾸지 않는다.
+    await runDailyDigest(env);
   },
 };

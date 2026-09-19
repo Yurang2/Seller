@@ -71,6 +71,11 @@ export const moreSections = [
   ["/records/suppliers", "공급처·견적", "오퍼 · 대화 기록"],
   ["/records/shipping_scenarios", "배송 비교", "경로 · 요율표 · 포워더"],
   ["/records/channels", "채널·등록 상품", "수동 절차 · 판매 중 기록"],
+  [
+    "/records/orders",
+    "주문",
+    "접수→발주→발송→통관→배송→정산 · 통관부호 미저장",
+  ],
   ["/records/notes", "지식 노트", "관찰 · 메모"],
   ["/records/decisions", "결정 기록", "이유와 대안"],
   ["/records/readiness_items", "사업 준비", "판매 개시 체크리스트"],

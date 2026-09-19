@@ -268,23 +268,23 @@ const manualSops = [
       },
       {
         n: 2,
-        text: "주문 옵션·수량·수취인·(구매대행이면) 통관부호를 확인한다.",
-        check: "통관부호 확보",
+        text: "주문 기록을 만든다(채널 주문번호·주문일·수량·상품). 통관부호는 채널 주문 화면에서만 확인하고 앱에는 '수집 여부'만 기록한다.",
+        check: "주문 기록 · 통관부호 수집 여부",
       },
       {
         n: 3,
-        text: "공급처에서 발주하고 결제 화면을 캡처한다. 실결제액을 일지에 적는다.",
-        check: "결제 캡처",
+        text: "공급처에서 발주하고 결제 화면을 캡처해 주문의 '공급처 실결제액' 근거로 첨부한다. 상태를 발주로 바꾼다.",
+        check: "결제 캡처 첨부 · 상태 발주",
       },
       {
         n: 4,
-        text: "송장이 나오면 채널에 발송 처리한다.",
-        check: "채널 발송 처리",
+        text: "배대지 출고 후 송장번호를 주문에 적고 채널에 발송 처리한다. 상태를 발송으로 바꾼다.",
+        check: "송장번호 · 채널 발송 처리",
       },
       {
         n: 5,
-        text: "배송 완료·정산을 확인하고 일지에 적는다. 주문 기능(M3)이 생기면 이 절차는 그대로 화면으로 옮겨진다.",
-        check: "정산 확인",
+        text: "배송완료일을 적고, 채널 정산이 들어오면 정산 내역 캡처를 '채널 정산액' 근거로 첨부한 뒤 상태를 정산으로 바꾼다.",
+        check: "배송완료일 · 정산액 근거 · 상태 정산",
       },
     ],
   },
@@ -320,6 +320,7 @@ export async function reconcileTasks(db: D1Database) {
     "listings",
     "readiness_items",
     "tasks",
+    "orders",
   ];
   const [modelRow, ...lists] = await db.batch<Row>([
     db.prepare("SELECT value_json FROM settings WHERE key='business_model'"),
@@ -481,6 +482,49 @@ export async function reconcileTasks(db: D1Database) {
         { detail: "절차: 채널에 상품 올리기 (수동)" },
       );
   }
+  // 주문(M3): 접수 후 1일 지나도 발주 없음 / 발송인데 송장 없음 / 배송완료 14일 지나도 정산 없음.
+  const daysAgo = (n: number) => plusDays(-n);
+  for (const o of recs.orders ?? []) {
+    const productName =
+      products.find((p) => p.id === o.product_id)?.name ?? o.order_no;
+    if (o.status === "received" && (o.ordered_at ?? "") <= daysAgo(1))
+      add(
+        "order_needs_purchase",
+        "orders",
+        o.id,
+        `발주하기: ${productName} · 주문 ${o.order_no}`,
+        1,
+        {
+          detail: "공급처에서 결제하고 결제 캡처를 공급처 실결제액 근거로 첨부",
+        },
+      );
+    if (o.status === "shipped_cn" && !o.tracking_no)
+      add(
+        "order_needs_tracking",
+        "orders",
+        o.id,
+        `송장 기록: ${productName} · 주문 ${o.order_no}`,
+        2,
+        { detail: "배대지 출고 송장번호를 적고 채널에 발송 처리" },
+      );
+    if (
+      o.status === "delivered" &&
+      o.delivered_at &&
+      o.delivered_at <= daysAgo(14) &&
+      !o.settled_at
+    )
+      add(
+        "order_needs_settlement",
+        "orders",
+        o.id,
+        `정산 확인: ${productName} · 주문 ${o.order_no}`,
+        2,
+        {
+          detail:
+            "채널 정산 내역 캡처를 채널 정산액 근거로 첨부하고 상태를 정산으로",
+        },
+      );
+  }
   for (const r of recs.readiness_items)
     if (r.status === "blocked" && r.recheck_at && r.recheck_at < today())
       add(
@@ -518,6 +562,10 @@ export async function reconcileTasks(db: D1Database) {
         "rule:derive",
       );
 }
+const decodeJob = (r: Row) => ({
+  ...r,
+  summary: r.summary_json ? JSON.parse(r.summary_json) : null,
+});
 export async function workspace(db: D1Database) {
   // 초기 설정·비용 사전·준비 항목·수동 절차는 멱등이라 매번 보장한다(새 항목이 추가돼도 기존 DB에 채워진다).
   await initialize(db);
@@ -590,6 +638,19 @@ export async function workspace(db: D1Database) {
         .prepare("SELECT * FROM cost_line_types ORDER BY sort_order")
         .all()
     ).results,
+    last_digest: (await db
+      .prepare(
+        "SELECT * FROM job_runs WHERE job_key='daily_digest' ORDER BY started_at DESC LIMIT 1",
+      )
+      .first<Row>())
+      ? decodeJob(
+          (await db
+            .prepare(
+              "SELECT * FROM job_runs WHERE job_key='daily_digest' ORDER BY started_at DESC LIMIT 1",
+            )
+            .first<Row>())!,
+        )
+      : null,
     automation: "none",
     mode:
       settings.mode_override === "operations" ||

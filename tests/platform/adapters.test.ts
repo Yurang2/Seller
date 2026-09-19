@@ -28,7 +28,7 @@ describe("desktop binding contract", () => {
     try {
       migrate(db, resolve("migrations"));
       migrate(db, resolve("migrations"));
-      expect(await db.prepare("SELECT count(*) n FROM _migrations").first("n")).toBe(3);
+      expect(await db.prepare("SELECT count(*) n FROM _migrations").first("n")).toBe(4);
       const dir = join(root, "migration"); mkdirSync(dir);
       writeFileSync(join(dir, "0004_fail.sql"), "CREATE TABLE rolled_back(id); --> statement-breakpoint INVALID SQL;");
       expect(() => migrate(db, dir)).toThrow();

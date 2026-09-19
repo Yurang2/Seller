@@ -891,3 +891,65 @@ export const listings = sqliteTable(
     ),
   ],
 );
+// M3 주문. 통관부호 등 고객 개인정보는 저장하지 않는다(수집 여부만). ENCRYPTION_KEY 없이는 PII를 담지 않는다는 원칙.
+export const orders = sqliteTable(
+  "orders",
+  {
+    id: text("id").primaryKey(),
+    channel_id: text("channel_id")
+      .references((): AnySQLiteColumn => channels.id)
+      .notNull(),
+    listing_id: text("listing_id").references(
+      (): AnySQLiteColumn => listings.id,
+    ),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    variant_id: text("variant_id").references(
+      (): AnySQLiteColumn => product_variants.id,
+    ),
+    order_no: text("order_no").notNull(),
+    ordered_at: text("ordered_at").notNull(),
+    qty: integer("qty").notNull(),
+    status: text("status").notNull(),
+    customs_code_collected: text("customs_code_collected").notNull(),
+    supplier_order_no: text("supplier_order_no"),
+    tracking_no: text("tracking_no"),
+    delivered_at: text("delivered_at"),
+    settled_at: text("settled_at"),
+    notes: text("notes"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_orders_channel_id").on(t.channel_id),
+    index("idx_orders_product_id").on(t.product_id),
+    index("idx_orders_listing_id").on(t.listing_id),
+    index("idx_orders_status").on(t.status),
+    check(
+      "orders_status_enum",
+      sql`status IN ('received','ordered','shipped_cn','in_customs','delivered','settled','cancelled','returned')`,
+    ),
+    check(
+      "orders_customs_enum",
+      sql`customs_code_collected IN ('unknown','collected','not_needed')`,
+    ),
+  ],
+);
+// Job 실행 기록. 예약 실행(cron)은 실행 코드와 함께만 존재한다(R-10).
+export const job_runs = sqliteTable(
+  "job_runs",
+  {
+    id: text("id").primaryKey(),
+    job_key: text("job_key").notNull(),
+    started_at: text("started_at").notNull(),
+    finished_at: text("finished_at"),
+    status: text("status").notNull(),
+    summary_json: text("summary_json"),
+  },
+  (t) => [
+    index("idx_job_runs_key_started").on(t.job_key, t.started_at),
+    check("job_runs_status_enum", sql`status IN ('running','ok','failed')`),
+  ],
+);
