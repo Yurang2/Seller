@@ -28,6 +28,7 @@ pnpm build
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                         | 기술 구조 설계(D-05). 스택, 저장소 구조, wrangler 설정, M0 스키마 SQL, 인증, API 규약, 백업·복원, 골격 완료 정의                               | 구현자         |
 | [docs/RESEARCH_SHEET.md](docs/RESEARCH_SHEET.md)                     | 조사 시트(엑셀) 열 구조와 데이터 모델 대응표                                                                                                   | 사용자, 구현자 |
 | [templates/research_template.xlsx](templates/research_template.xlsx) | 조사 시트 템플릿. 초기 조사 데이터가 들어 있고, 원가 계산 탭은 미확인 값을 0으로 계산하지 않는다                                               | 사용자         |
+| [docs/HANDOFF_2026-09-19.md](docs/HANDOFF_2026-09-19.md) | **인수인계**: 현재 상태·운영 정보·진행 중 작업 4건의 설계·운영 데이터 작업 방법·플랫폼 함정. 이어받는 사람은 이것부터 | 구현자 |
 | [docs/LISTING_KIT.md](docs/LISTING_KIT.md) | 상세페이지 키트: 구조·고지 블록 표준 문구·금지 표현·이미지 체크리스트·상품명 규칙. 앱의 "상세페이지 초안"이 이 키트를 쓴다 | 사용자 |
 | [docs/RESEARCH_CANDIDATES_2026-09-19.md](docs/RESEARCH_CANDIDATES_2026-09-19.md) | 구매대행 첫 상품군 후보 10개·요건 프로필 6개·선정 기준(D-04). 파일 `templates/research/candidates_2026-09-19.xlsx` | 사용자·구현자 |
 | [docs/PLAN_NEXT.md](docs/PLAN_NEXT.md) | 다음 단계 계획 v2(2026-09-19): Cloudflare 배포·Access(C) → 모바일 핵심 작업(M) → 표 화면·사용자 정의 열(B). 데스크톱(A) 보류. Astra 6 지시문 포함 | 구현자 |
