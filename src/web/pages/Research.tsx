@@ -17,6 +17,7 @@ import {
   type WorkspaceData,
 } from "./Workspace";
 import { claimLabels, stages } from "../../domain/records/catalog";
+import { buildListingDraft } from "../../domain/listingKit";
 export function ResearchRecords() {
   const { type, id } = useParams();
   return (
@@ -310,6 +311,7 @@ function ProductTools({ id }: { id: string }) {
           )}
         </section>
       )}
+      <ListingDraft product={p} data={d} />
       <Calculator product={p} data={d} />
       {p.status === "pricing" && (
         <section className="panel">
@@ -356,6 +358,100 @@ const won = (x: unknown) =>
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }) + "원";
+
+// 상세페이지 초안: 기록에 있는 값만 채우고 나머지는 [확인 필요]로 남긴다. 복사해서 채널 편집기에 붙인다.
+function ListingDraft({
+  product,
+  data,
+}: {
+  product: Row;
+  data: WorkspaceData;
+}) {
+  const [open, setOpen] = useState(false),
+    [copied, setCopied] = useState(false);
+  const profile =
+    data.records.compliance_profiles.find((r) => r.id === product.profile_id) ??
+    null;
+  const draft = buildListingDraft({
+    product: product as any,
+    profile: profile as any,
+    items: data.records.requirement_items.filter(
+      (i) => i.profile_id === product.profile_id,
+    ) as any,
+    variants: data.records.product_variants.filter(
+      (v) => v.product_id === product.id,
+    ) as any,
+    claims: data.claims as any,
+    businessModel: data.settings.business_model,
+  });
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(draft.markdown);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setOpen(true);
+    }
+  }
+  const sop = data.records.sops.find((s) => s.key === "listing_page_manual");
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <h2>상세페이지 초안</h2>
+        <div className="buttons">
+          {sop && (
+            <Link
+              className="button secondary small"
+              to={recordUrl("sops", sop.id)}
+            >
+              작성 절차
+            </Link>
+          )}
+          <button
+            type="button"
+            className="secondary small"
+            onClick={() => setOpen(!open)}
+          >
+            {open ? "접기" : "초안 보기"}
+          </button>
+          <button type="button" className="small" onClick={copy}>
+            {copied ? "복사됨" : "마크다운 복사"}
+          </button>
+        </div>
+      </div>
+      <p className="muted">
+        기록된 값만 채워집니다. 채워야 할 것 {draft.gaps.length}개 · 고지 문구{" "}
+        {draft.notices.length}줄 · 금지 표현 {draft.forbidden.length}개 점검.
+        공급처 문구·이미지는 복사하지 않습니다.
+      </p>
+      {draft.gaps.length > 0 && (
+        <ul className="plain-list">
+          {draft.gaps.slice(0, 6).map((g) => (
+            <li key={g} className="muted">
+              · {g}
+            </li>
+          ))}
+          {draft.gaps.length > 6 && (
+            <li className="muted">외 {draft.gaps.length - 6}개</li>
+          )}
+        </ul>
+      )}
+      {open && (
+        <textarea
+          readOnly
+          value={draft.markdown}
+          rows={18}
+          aria-label="상세페이지 초안 마크다운"
+          style={{
+            width: "100%",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 12.5,
+          }}
+        />
+      )}
+    </section>
+  );
+}
 function CostResult({ result }: { result: Row }) {
   if (!result.outputs)
     return (

@@ -194,6 +194,17 @@ export function Home() {
     }));
   const wonInt = (x: unknown) =>
     x == null ? "미확인" : Math.round(Number(x)).toLocaleString("ko-KR") + "원";
+  // 같은 제목의 파생 할 일(예: 프로필 6개의 같은 조건)은 홈에서 한 줄로 묶는다. 전체 목록은 할 일 화면에.
+  const groupRows = (rows: Row[]) => {
+    const seen = new Map<string, Row & { _n: number }>();
+    for (const t of rows) {
+      const k = t.status + ":" + t.title;
+      const g = seen.get(k);
+      if (g) g._n += 1;
+      else seen.set(k, { ...t, _n: 1 });
+    }
+    return [...seen.values()];
+  };
   const taskLink = (t: Row) =>
     recordUrl(
       t.entity_type && catalog[t.entity_type] ? t.entity_type : "tasks",
@@ -315,13 +326,14 @@ export function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...blockers, ...nextActions].map((t) => (
+                    {groupRows([...blockers, ...nextActions]).map((t) => (
                       <tr key={t.id}>
                         <td>
                           <Badge value={t.status} />
                         </td>
                         <td>
                           <Link to={taskLink(t)}>{t.title}</Link>
+                          {t._n > 1 && <span className="muted"> ×{t._n}</span>}
                         </td>
                         <td className="muted">
                           {catalog[t.entity_type]?.label ??
@@ -349,11 +361,14 @@ export function Home() {
                 </table>
               </div>
               <div className="rt-mobile">
-                {[...blockers, ...nextActions].map((t) => (
+                {groupRows([...blockers, ...nextActions]).map((t) => (
                   <Link className="rt-row" key={t.id} to={taskLink(t)}>
                     <Badge value={t.status} />
                     <div>
-                      <strong>{t.title}</strong>
+                      <strong>
+                        {t.title}
+                        {t._n > 1 ? ` ×${t._n}` : ""}
+                      </strong>
                       <small>
                         {(catalog[t.entity_type]?.label ?? "") +
                           ((t.unblock_condition ?? t.detail)
