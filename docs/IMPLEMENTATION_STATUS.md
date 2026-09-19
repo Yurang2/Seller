@@ -12,9 +12,10 @@
 | `SESSION_SECRET` | 62자 난수를 생성해 `wrangler secret put`으로 등록. 값은 어디에도 기록하지 않음 |
 | 비로그인 차단 | `GET /api/v1/workspace` → 401 `LOGIN_REQUIRED`. `GET /` → 200 HTML(로그인 화면). `GET /api/v1/auth/status` → `configured:false` |
 | CSRF | 다른 Origin에서 `POST /api/v1/auth/setup` → 403 `ORIGIN_REJECTED` |
+| 배포 직후 결함 | 첫 비밀문구 설정이 500으로 실패. 원인: Workers WebCrypto의 PBKDF2 반복 상한 100,000회(코드 150,000회). 로컬 workerd는 상한을 강제하지 않아 테스트가 잡지 못했다. 100,000회로 낮춰 재배포하고 운영에서 설정→로그인 왕복을 curl로 확인한 뒤 확인용 설정 행은 삭제 |
 | 미실시 | 실제 브라우저에서 비밀문구 설정 → 로그인 → 초기 조사 불러오기 → 첨부 업로드(R2) 왕복. 사용자님이 첫 접속 때 진행하면 확인됨 |
 
-로그인 방식은 Cloudflare Access 대신 앱 자체 비밀문구(PBKDF2-SHA256 150k, HMAC 서명 쿠키 30일, 5회 실패 시 15분 잠금, 로그아웃 시 세션 버전 증가)다. `AUTH_MODE=access`로 바꾸면 기존 Access JWT 검사가 다시 켜진다. 배포 전 로컬 검증: 도메인 49 + Workers API 18 + 데스크톱 25 = 92개 테스트 통과, `tests/api/auth.test.ts` 포함.
+로그인 방식은 Cloudflare Access 대신 앱 자체 비밀문구(PBKDF2-SHA256 100k(Workers 상한), HMAC 서명 쿠키 30일, 5회 실패 시 15분 잠금, 로그아웃 시 세션 버전 증가)다. `AUTH_MODE=access`로 바꾸면 기존 Access JWT 검사가 다시 켜진다. 배포 전 로컬 검증: 도메인 49 + Workers API 18 + 데스크톱 25 = 92개 테스트 통과, `tests/api/auth.test.ts` 포함.
 
 ## 2026-09-19 · 트랙 A 작업 보존 / 모바일 우선 재계획 대기
 

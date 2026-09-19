@@ -9,7 +9,8 @@ const COOKIE = "seller_session";
 const SESSION_DAYS = 30;
 const MAX_FAILS = 5;
 const LOCK_MINUTES = 15;
-const ITERATIONS = 150_000;
+// Cloudflare Workers의 WebCrypto는 PBKDF2 반복 100,000회를 상한으로 둔다(초과 시 NotSupportedError).
+const ITERATIONS = 100_000;
 const enc = new TextEncoder();
 const b64 = (buf: ArrayBuffer | Uint8Array) =>
   btoa(String.fromCharCode(...new Uint8Array(buf)));
