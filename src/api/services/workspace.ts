@@ -332,9 +332,13 @@ export async function reconcileTasks(db: D1Database) {
     d.setUTCDate(d.getUTCDate() + n);
     return d.toISOString().slice(0, 10);
   };
+  // 보류·거절·종료된 상품만 쓰는 프로필은 요건 확인을 재촉하지 않는다(재검토 시 상품 단계가 돌아오면 다시 생긴다).
+  const activeProducts = products.filter(
+    (x) => !["on_hold", "rejected", "discontinued"].includes(x.status),
+  );
   for (const p of profiles)
     if (
-      products.some((x) => x.profile_id === p.id) &&
+      activeProducts.some((x) => x.profile_id === p.id) &&
       p.gate_result === "unknown"
     )
       add(
@@ -424,9 +428,7 @@ export async function reconcileTasks(db: D1Database) {
     }
     if (
       ["listing_ready", "live"].includes(p.status) &&
-      !recs.listings.some(
-        (l) => l.product_id === p.id && l.status === "live",
-      )
+      !recs.listings.some((l) => l.product_id === p.id && l.status === "live")
     )
       add(
         "product_needs_listing",

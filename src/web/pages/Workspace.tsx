@@ -937,7 +937,9 @@ export function RecordEditor({
               )}
             </label>
           ))}
-        <label className="wide">
+      </div>
+      <div className="form-actions">
+        <label>
           이번 기록·변경의 이유 *
           <textarea
             required
@@ -946,8 +948,10 @@ export function RecordEditor({
             placeholder="나중에 다시 봐도 이해할 수 있게 적어주세요."
           />
         </label>
+        <button disabled={busy}>
+          {busy ? "저장 중…" : "이유와 함께 저장"}
+        </button>
       </div>
-      <button disabled={busy}>{busy ? "저장 중…" : "이유와 함께 저장"}</button>
     </form>
   );
 }

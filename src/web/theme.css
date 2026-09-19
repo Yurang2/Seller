@@ -867,3 +867,117 @@ th {
 .login {
   padding: 26px;
 }
+/* ---------- 입력 폼: 압축·직관 (기록 수정/새 기록/근거 편집기) ---------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px 14px;
+  margin: 12px 0;
+}
+.form-grid label,
+.claim-editor label,
+.capture-steps label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.form-grid .wide {
+  grid-column: 1 / -1;
+}
+input,
+select,
+.form-grid input,
+.form-grid select {
+  height: 36px;
+  padding: 0 11px;
+  font-size: 13.5px;
+  border-radius: 12px;
+}
+textarea,
+.form-grid textarea {
+  min-height: 56px;
+  padding: 8px 11px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  border-radius: 12px;
+  resize: vertical;
+}
+.form-grid textarea:placeholder-shown:not(:focus) {
+  min-height: 36px;
+  height: 36px;
+  padding: 8px 11px;
+  overflow: hidden;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-3);
+}
+.record-editor .section-head h2 {
+  font-size: 15px;
+}
+/* 이유 + 저장은 항상 손에 닿게: 폼 아래에 붙는 유리 바 */
+.record-editor .form-actions,
+.claim-editor .form-actions {
+  position: sticky;
+  bottom: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+  padding: 10px;
+  margin-top: 8px;
+  border-radius: 16px;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.form-actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.form-actions textarea {
+  min-height: 36px;
+  height: 36px;
+}
+.form-actions textarea:focus {
+  height: auto;
+  min-height: 64px;
+}
+@media (max-width: 760px) {
+  .form-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+  }
+  .record-editor .form-actions,
+  .claim-editor .form-actions {
+    grid-template-columns: 1fr;
+    bottom: 88px;
+  }
+}
+/* 상세 보기도 같은 밀도로 */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px 16px;
+}
+.detail-grid dt {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 3px;
+}
+.detail-grid dd {
+  font-size: 13.5px;
+}
+.detail-grid a {
+  color: var(--accent);
+}
