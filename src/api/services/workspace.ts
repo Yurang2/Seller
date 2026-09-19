@@ -6,8 +6,9 @@ import { isStale } from "../../domain/claim";
 import { gradeProduct, type GradeResult } from "../../domain/grade";
 import {
   saveRecord,
-  listRecords,
-  getRecord,
+  loadRecords,
+  listSql,
+  decode,
   audit,
   today,
   fail,
@@ -82,6 +83,19 @@ export async function setSetting(
   ]);
 }
 export async function initialize(db: D1Database) {
+  // 있는지 확인은 batch 한 번으로 끝내고, 없는 것만 쓴다(정상 상태에서는 D1 호출 1회).
+  const [haveSettings, haveClt, haveReadiness, haveSops] = await db.batch<Row>([
+    db.prepare("SELECT key FROM settings"),
+    db.prepare("SELECT code FROM cost_line_types"),
+    db.prepare("SELECT key FROM readiness_items"),
+    db.prepare("SELECT key FROM sops WHERE deleted_at IS NULL"),
+  ]);
+  const has = {
+    settings: new Set(haveSettings.results.map((r) => r.key)),
+    clt: new Set(haveClt.results.map((r) => r.code)),
+    readiness: new Set(haveReadiness.results.map((r) => r.key)),
+    sops: new Set(haveSops.results.map((r) => r.key)),
+  };
   const settings: Row = {
     business_model: "undecided",
     mode_override: "auto",
@@ -99,12 +113,7 @@ export async function initialize(db: D1Database) {
     expected_monthly_units: null,
   };
   for (const [key, v] of Object.entries(settings))
-    if (
-      !(await db
-        .prepare("SELECT key FROM settings WHERE key=?")
-        .bind(key)
-        .first())
-    )
+    if (!has.settings.has(key))
       await setSetting(db, key, v, "초기 설정 · 미결정 유지", "import:seed");
   for (const [
     code,
@@ -114,13 +123,7 @@ export async function initialize(db: D1Database) {
     payer_default,
     basis,
   ] of costLineTypes) {
-    if (
-      await db
-        .prepare("SELECT code FROM cost_line_types WHERE code=?")
-        .bind(code)
-        .first()
-    )
-      continue;
+    if (has.clt.has(code)) continue;
     const row = {
       code,
       name,
@@ -150,12 +153,7 @@ export async function initialize(db: D1Database) {
     ]);
   }
   for (const [key, title, category, depends_on] of readiness)
-    if (
-      !(await db
-        .prepare("SELECT id FROM readiness_items WHERE key=?")
-        .bind(key)
-        .first())
-    )
+    if (!has.readiness.has(key))
       await saveRecord(
         db,
         "readiness_items",
@@ -172,12 +170,7 @@ export async function initialize(db: D1Database) {
       );
   // 연동이 없는 동안 사람이 따라 할 절차. 연동이 생겨도 "수동 대체 절차"로 남는다(PLAN 10.3).
   for (const sop of manualSops)
-    if (
-      !(await db
-        .prepare("SELECT id FROM sops WHERE key=? AND deleted_at IS NULL")
-        .bind(sop.key)
-        .first())
-    )
+    if (!has.sops.has(sop.key))
       await saveRecord(db, "sops", sop, "수동 절차 초기화", "import:seed");
 }
 const manualSops = [
@@ -274,9 +267,27 @@ export async function reconcileTasks(db: D1Database) {
       status: "todo",
       ...extra,
     });
-  const model = await db
-    .prepare("SELECT value_json FROM settings WHERE key='business_model'")
-    .first<Row>();
+  // 읽기는 batch 한 번(부속 요청 1회). 쓰기는 조건이 바뀐 작업에만 일어난다.
+  const READ_TYPES = [
+    "products",
+    "compliance_profiles",
+    "requirement_items",
+    "offers",
+    "shipping_scenarios",
+    "costings",
+    "listings",
+    "readiness_items",
+    "tasks",
+  ];
+  const [modelRow, ...lists] = await db.batch<Row>([
+    db.prepare("SELECT value_json FROM settings WHERE key='business_model'"),
+    ...READ_TYPES.map((t) => db.prepare(listSql(t))),
+  ]);
+  const claims = await readClaims(db);
+  const recs = Object.fromEntries(
+    READ_TYPES.map((t, i) => [t, lists[i].results.map((r) => decode(r, t)!)]),
+  ) as Record<string, Row[]>;
+  const model = modelRow.results[0] ?? null;
   if (!model || JSON.parse(model.value_json) === "undecided")
     add(
       "decide_business_model",
@@ -292,11 +303,13 @@ export async function reconcileTasks(db: D1Database) {
         recheck_at: today(),
       },
     );
-  const claims = await readClaims(db);
+  const ownerTypes = [...new Set(claims.map((c) => c.owner_type))].filter(
+    (t) => catalog[t] && !recs[t],
+  );
+  Object.assign(recs, await loadRecords(db, ownerTypes));
   const owners = new Map<string, Set<string>>();
   for (const type of new Set(claims.map((c) => c.owner_type)))
-    if (catalog[type])
-      owners.set(type, new Set((await listRecords(db, type)).map((r) => r.id)));
+    if (catalog[type]) owners.set(type, new Set(recs[type].map((r) => r.id)));
   for (const c of claims)
     if (
       isStale(c, today()) &&
@@ -310,10 +323,10 @@ export async function reconcileTasks(db: D1Database) {
         2,
         { detail: `기한 ${c.recheck_by} · ${c.source_ref ?? "출처 미확인"}` },
       );
-  const products = await listRecords(db, "products"),
-    profiles = await listRecords(db, "compliance_profiles"),
-    offers = await listRecords(db, "offers"),
-    scenarios = await listRecords(db, "shipping_scenarios");
+  const products = recs.products,
+    profiles = recs.compliance_profiles,
+    offers = recs.offers,
+    scenarios = recs.shipping_scenarios;
   const plusDays = (n: number) => {
     const d = new Date(today() + "T00:00:00Z");
     d.setUTCDate(d.getUTCDate() + n);
@@ -344,7 +357,7 @@ export async function reconcileTasks(db: D1Database) {
           recheck_at: plusDays(14),
         },
       );
-  for (const i of await listRecords(db, "requirement_items"))
+  for (const i of recs.requirement_items)
     if (i.item_result === "conditional")
       add(
         "requirement_condition",
@@ -388,7 +401,7 @@ export async function reconcileTasks(db: D1Database) {
         3,
       );
     if (p.current_costing_id) {
-      const c = await getRecord(db, "costings", p.current_costing_id);
+      const c = recs.costings.find((x) => x.id === p.current_costing_id);
       if (c?.unknown_keys?.length)
         add(
           "costing_unknown",
@@ -411,7 +424,7 @@ export async function reconcileTasks(db: D1Database) {
     }
     if (
       ["listing_ready", "live"].includes(p.status) &&
-      !(await listRecords(db, "listings")).some(
+      !recs.listings.some(
         (l) => l.product_id === p.id && l.status === "live",
       )
     )
@@ -424,7 +437,7 @@ export async function reconcileTasks(db: D1Database) {
         { detail: "절차: 채널에 상품 올리기 (수동)" },
       );
   }
-  for (const r of await listRecords(db, "readiness_items"))
+  for (const r of recs.readiness_items)
     if (r.status === "blocked" && r.recheck_at && r.recheck_at < today())
       add(
         "readiness_recheck",
@@ -433,7 +446,7 @@ export async function reconcileTasks(db: D1Database) {
         `재확인: ${r.title}`,
         2,
       );
-  const existing = (await listRecords(db, "tasks")).filter(
+  const existing = recs.tasks.filter(
     (t) => t.source === "derived" && !["done", "cancelled"].includes(t.status),
   );
   const key = (t: Row) => `${t.rule_key}:${t.entity_type}:${t.entity_id}`;
@@ -465,21 +478,21 @@ export async function workspace(db: D1Database) {
   // 초기 설정·비용 사전·준비 항목·수동 절차는 멱등이라 매번 보장한다(새 항목이 추가돼도 기존 DB에 채워진다).
   await initialize(db);
   await reconcileTasks(db);
-  const records: Record<string, Row[]> = {};
-  for (const type of Object.keys(catalog))
-    records[type] = await listRecords(db, type);
+  // 모든 종류·설정·최근 활동을 batch 한 번으로 읽는다(원격 D1 왕복 1회). 근거는 batch 1회 더.
+  const types = Object.keys(catalog);
+  const res = await db.batch<Row>([
+    ...types.map((t) => db.prepare(listSql(t))),
+    db.prepare("SELECT * FROM settings"),
+    db.prepare("SELECT * FROM activity_log ORDER BY at DESC LIMIT 200"),
+  ]);
+  const records: Record<string, Row[]> = Object.fromEntries(
+    types.map((t, i) => [t, res[i].results.map((r) => decode(r, t)!)]),
+  );
   const claims = await readClaims(db);
   const settings = Object.fromEntries(
-    (await db.prepare("SELECT * FROM settings").all<Row>()).results.map((r) => [
-      r.key,
-      JSON.parse(r.value_json),
-    ]),
+    res[types.length].results.map((r) => [r.key, JSON.parse(r.value_json)]),
   );
-  const activity = (
-    await db
-      .prepare("SELECT * FROM activity_log ORDER BY at DESC LIMIT 200")
-      .all<Row>()
-  ).results;
+  const activity = res[types.length + 1].results;
   const seen = new Set<string>();
   const recent = activity
     .filter(

@@ -34,15 +34,23 @@ export function decode(row: Row | null, type?: string): Row | null {
     ]),
   );
 }
-export async function listRecords(db: D1Database, type: string) {
+export function listSql(type: string) {
   definition(type);
-  return (
-    await db
-      .prepare(
-        `SELECT * FROM ${type}${type === "fx_rates" ? "" : " WHERE deleted_at IS NULL"} ORDER BY ${type === "tasks" ? "priority, " : ""}created_at DESC`,
-      )
-      .all<Row>()
-  ).results.map((r) => decode(r, type)!);
+  return `SELECT * FROM ${type}${type === "fx_rates" ? "" : " WHERE deleted_at IS NULL"} ORDER BY ${type === "tasks" ? "priority, " : ""}created_at DESC`;
+}
+export async function listRecords(db: D1Database, type: string) {
+  return (await db.prepare(listSql(type)).all<Row>()).results.map(
+    (r) => decode(r, type)!,
+  );
+}
+// 여러 종류를 D1 batch 한 번(부속 요청 1회)으로 읽는다. 원격 D1은 호출마다 왕복 지연이 붙으므로
+// 화면 하나가 종류별로 따로 읽으면 수십 배 느려진다.
+export async function loadRecords(db: D1Database, types: string[]) {
+  if (!types.length) return {} as Record<string, Row[]>;
+  const res = await db.batch<Row>(types.map((t) => db.prepare(listSql(t))));
+  return Object.fromEntries(
+    types.map((t, i) => [t, res[i].results.map((r) => decode(r, t)!)]),
+  ) as Record<string, Row[]>;
 }
 export async function getRecord(db: D1Database, type: string, id: string) {
   definition(type);

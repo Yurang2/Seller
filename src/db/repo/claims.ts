@@ -12,9 +12,16 @@ import { ulid } from "ulid";
 import type { BatchItem } from "drizzle-orm/batch";
 
 export async function readClaims(db: D1Database) {
-  const orm = drizzle(db);
-  const rows = await orm.select().from(claims).where(isNull(claims.deleted_at));
-  const joins = await orm.select().from(claim_attachments);
+  // 두 조회를 D1 batch 하나로(원격 왕복 1회). 스키마의 속성명과 열 이름이 같아 원시 행을 그대로 쓴다.
+  // (데스크톱 ORM의 batch는 쓰기 전용이라 drizzle batch 대신 D1 batch를 쓴다.)
+  const [claimRows, joinRows] = await db.batch([
+    db.prepare("SELECT * FROM claims WHERE deleted_at IS NULL"),
+    db.prepare("SELECT * FROM claim_attachments"),
+  ]);
+  const rows = claimRows.results as Array<typeof claims.$inferSelect>;
+  const joins = joinRows.results as Array<
+    typeof claim_attachments.$inferSelect
+  >;
   return rows.map((r) => ({
     ...r,
     value_json: r.value_json === null ? null : JSON.parse(r.value_json),
