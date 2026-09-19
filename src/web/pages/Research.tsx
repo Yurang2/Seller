@@ -5,6 +5,7 @@ import { api, jsonBody } from "../api/client";
 import {
   Records,
   useWorkspace,
+  useClaims,
   recordUrl,
   title,
   label,
@@ -367,6 +368,8 @@ function ListingDraft({
   product: Row;
   data: WorkspaceData;
 }) {
+  // 초안은 근거 값(무게·치수·결정가)을 읽는다. 근거는 별도 조회라 여기서 받는다.
+  const claims = useClaims().data ?? [];
   const [open, setOpen] = useState(false),
     [copied, setCopied] = useState(false);
   const profile =
@@ -381,7 +384,7 @@ function ListingDraft({
     variants: data.records.product_variants.filter(
       (v) => v.product_id === product.id,
     ) as any,
-    claims: data.claims as any,
+    claims: claims as any,
     businessModel: data.settings.business_model,
   });
   async function copy() {

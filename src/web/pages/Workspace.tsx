@@ -14,9 +14,7 @@ import { RecordTable, useViewMode } from "./Table";
 export type Row = Record<string, any>;
 export type WorkspaceData = {
   records: Record<string, Row[]>;
-  claims: (Claim & { id: string })[];
   settings: Row;
-  activity: Row[];
   recent: Row[];
   stale: Claim[];
   cost_line_types: Row[];
@@ -59,6 +57,23 @@ export function useWorkspace() {
   return useQuery({
     queryKey: ["workspace"],
     queryFn: () => api<WorkspaceData>("/workspace"),
+  });
+}
+// 근거 전체는 응답이 커서 홈에서 빼고 필요한 화면에서만 따로 받는다(기록 변경 시 함께 무효화된다).
+export function useClaims() {
+  return useQuery({
+    queryKey: ["claims"],
+    queryFn: async () =>
+      (await api<{ data: (Claim & { id: string })[] }>("/claims")).data,
+  });
+}
+// 기록 하나의 변경 이력(변경 전·후 스냅샷 포함). 상세 화면을 열 때만 읽는다.
+export function useHistory(type: string, id?: string) {
+  return useQuery({
+    queryKey: ["history", type, id],
+    enabled: !!id,
+    queryFn: async () =>
+      (await api<{ data: Row[] }>(`/records/${type}/${id}/history`)).data,
   });
 }
 export const label = (s: string) => labels[s] ?? s;
@@ -647,6 +662,8 @@ function StructuredInput({
   onChange: (v: any) => void;
   data: WorkspaceData;
 }) {
+  // 금액 근거 선택 드롭다운에만 필요하다. 근거 목록은 별도 조회라 여기서 받는다.
+  const moneyClaims = useClaims().data;
   if (field.label === "포함 비용 코드")
     return (
       <div>
@@ -705,7 +722,7 @@ function StructuredInput({
                     }
                   >
                     <option value="">근거 선택</option>
-                    {data.claims
+                    {(moneyClaims ?? [])
                       .filter((c) => c.kind === "money")
                       .map((c) => (
                         <option key={c.id} value={c.id}>
@@ -1353,6 +1370,8 @@ export function Records({ children }: { children?: React.ReactNode }) {
     [error, setError] = useState(""),
     [deleteReason, setDeleteReason] = useState("");
   const [view, setView] = useViewMode(type);
+  const claimsQuery = useClaims();
+  const history = useHistory(type, id);
   const d = q.data,
     def = catalog[type];
   if (!def) return <main className="page">기록 종류가 없습니다.</main>;
@@ -1379,7 +1398,9 @@ export function Records({ children }: { children?: React.ReactNode }) {
       ["readiness_items", "fx_rates"],
     ].find((g) => g.includes(type)) ?? [];
   const claims = record
-    ? d.claims.filter((c) => c.owner_type === type && c.owner_id === record.id)
+    ? (claimsQuery.data ?? []).filter(
+        (c) => c.owner_type === type && c.owner_id === record.id,
+      )
     : [];
   const related = record
     ? d.records.links.filter(
@@ -1659,37 +1680,35 @@ export function Records({ children }: { children?: React.ReactNode }) {
           </section>
           <section className="panel">
             <h2>왜 이렇게 됐나요?</h2>
-            {d.activity
-              .filter((a) => a.entity_type === type && a.entity_id === id)
-              .slice(0, 20)
-              .map((a) => (
-                <div className="history-row" key={a.id}>
-                  <time>{new Date(a.at).toLocaleString("ko-KR")}</time>
-                  <strong>{a.reason}</strong>
-                  <small>
-                    {a.actor === "user"
-                      ? "사용자 입력"
-                      : a.actor.startsWith("import")
-                        ? "가져온 기록"
-                        : "규칙에 따른 변경"}
-                  </small>
-                  <details>
-                    <summary>변경 전·후</summary>
-                    <pre>
-                      {JSON.stringify(
-                        {
-                          before: a.before_json
-                            ? JSON.parse(a.before_json)
-                            : null,
-                          after: JSON.parse(a.after_json),
-                        },
-                        null,
-                        2,
-                      )}
-                    </pre>
-                  </details>
-                </div>
-              ))}
+            {history.isLoading && <p className="muted">이력 불러오는 중…</p>}
+            {(history.data ?? []).map((a) => (
+              <div className="history-row" key={a.id}>
+                <time>{new Date(a.at).toLocaleString("ko-KR")}</time>
+                <strong>{a.reason}</strong>
+                <small>
+                  {a.actor === "user"
+                    ? "사용자 입력"
+                    : a.actor.startsWith("import")
+                      ? "가져온 기록"
+                      : "규칙에 따른 변경"}
+                </small>
+                <details>
+                  <summary>변경 전·후</summary>
+                  <pre>
+                    {JSON.stringify(
+                      {
+                        before: a.before_json
+                          ? JSON.parse(a.before_json)
+                          : null,
+                        after: JSON.parse(a.after_json),
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </details>
+              </div>
+            ))}
           </section>
           {!["costings", "fx_rates"].includes(type) && (
             <details className="panel">
@@ -1997,6 +2016,7 @@ export function Settings() {
 }
 export function Claims() {
   const q = useWorkspace(),
+    claims = useClaims(),
     [selected, setSelected] = useState<any>(null),
     [staleOnly, setStaleOnly] = useState(false);
   return (
@@ -2022,7 +2042,7 @@ export function Claims() {
         재확인 기한 지난 항목만
       </label>
       <div className="claims-grid">
-        {q.data?.claims
+        {(claims.data ?? [])
           .filter(
             (c) =>
               !catalog[c.owner_type] ||

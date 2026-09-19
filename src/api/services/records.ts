@@ -39,8 +39,8 @@ export function listSql(type: string) {
   return `SELECT * FROM ${type}${type === "fx_rates" ? "" : " WHERE deleted_at IS NULL"} ORDER BY ${type === "tasks" ? "priority, " : ""}created_at DESC`;
 }
 export async function listRecords(db: D1Database, type: string) {
-  return (await db.prepare(listSql(type)).all<Row>()).results.map(
-    (r) => decode(r, type)!,
+  return (await db.prepare(listSql(type)).all<Row>()).results.map((r) =>
+    decode(r, type)!,
   );
 }
 // 여러 종류를 D1 batch 한 번(부속 요청 1회)으로 읽는다. 원격 D1은 호출마다 왕복 지연이 붙으므로
@@ -680,4 +680,16 @@ export async function deleteRecord(
   ]);
   if (type === "shipping_legs") await refreshWarnings(db, before.scenario_id);
   if (type === "requirement_items") await refreshGate(db, before.profile_id);
+}
+// 기록 하나의 변경 이력. 변경 전·후 스냅샷이 커서 상세 화면에서 필요할 때만 읽는다.
+export async function recordHistory(db: D1Database, type: string, id: string) {
+  definition(type);
+  return (
+    await db
+      .prepare(
+        "SELECT * FROM activity_log WHERE entity_type=? AND entity_id=? ORDER BY at DESC LIMIT 20",
+      )
+      .bind(type, id)
+      .all<Row>()
+  ).results;
 }

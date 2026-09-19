@@ -10,6 +10,7 @@ import {
   recordUrl,
   title,
   useWorkspace,
+  useClaims,
 } from "./Workspace";
 
 // 휴대폰에서 가장 자주 하는 일: 캡처를 찍고 어떤 기록의 어떤 값인지 골라 근거로 저장한다.
@@ -29,6 +30,7 @@ const OWNER_ORDER = [
 ];
 export function Capture() {
   const q = useWorkspace();
+  const claims = useClaims();
   const d = q.data;
   const [ownerType, setOwnerType] = useState("offers"),
     [ownerId, setOwnerId] = useState(""),
@@ -40,8 +42,8 @@ export function Capture() {
   );
   const fields = Object.entries(catalog[ownerType]?.claims ?? {});
   const existing =
-    d && ownerId && field
-      ? d.claims.find(
+    claims.data && ownerId && field
+      ? claims.data.find(
           (c) =>
             c.owner_type === ownerType &&
             c.owner_id === ownerId &&

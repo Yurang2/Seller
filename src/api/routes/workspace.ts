@@ -14,6 +14,7 @@ import {
   listDeleted,
   deleteRecord,
   restoreRecord,
+  recordHistory,
   fail,
 } from "../services/records";
 import {
@@ -49,6 +50,11 @@ workspaceRoutes.get("/records/:type", async (c) =>
       c.req.query("deleted") === "1"
         ? await listDeleted(c.env.DB, c.req.param("type"))
         : await listRecords(c.env.DB, c.req.param("type")),
+  }),
+);
+workspaceRoutes.get("/records/:type/:id/history", async (c) =>
+  c.json({
+    data: await recordHistory(c.env.DB, c.req.param("type"), c.req.param("id")),
   }),
 );
 workspaceRoutes.post("/records/:type/:id/restore", async (c) => {

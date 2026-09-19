@@ -203,3 +203,30 @@ it("an order for a paused product still reconciles; derived order tasks point at
   expect(task.entity_id).toBe(o.id);
   expect(task.title).toContain(o.order_no);
 });
+
+it("workspace stays lean: no full audit snapshots, no claim list; history is its own endpoint", async () => {
+  const { recordHistory } = await import("../../src/api/services/records");
+  const p = (await listRecords(b.DB, "products"))[0];
+  const ws = (await workspace(b.DB)) as unknown as Record<string, unknown>;
+  // 홈 응답에는 근거 전체와 변경 전·후 스냅샷이 없다(응답의 78%였다).
+  expect(ws.claims).toBeUndefined();
+  const blob = JSON.stringify(ws);
+  expect(blob).not.toContain("before_json");
+  expect(blob).not.toContain("after_json");
+  // 홈이 쓰는 것은 남아 있다.
+  expect(Array.isArray(ws.stale)).toBe(true);
+  expect(Array.isArray(ws.recent)).toBe(true);
+  // 이력은 기록별로 따로 읽고, 거기에는 스냅샷이 있다.
+  await saveRecord(
+    b.DB,
+    "products",
+    { ...editable(p), notes: "이력 확인용 수정" },
+    "이력 테스트",
+  );
+  const hist = await recordHistory(b.DB, "products", p.id);
+  expect(hist.length).toBeGreaterThan(0);
+  expect(hist[0]).toHaveProperty("after_json");
+  expect(hist[0].entity_id).toBe(p.id);
+  // 다른 기록의 이력은 섞이지 않는다.
+  expect(hist.every((h) => h.entity_id === p.id)).toBe(true);
+});

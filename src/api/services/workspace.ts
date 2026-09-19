@@ -575,7 +575,11 @@ export async function workspace(db: D1Database) {
   const res = await db.batch<Row>([
     ...types.map((t) => db.prepare(listSql(t))),
     db.prepare("SELECT * FROM settings"),
-    db.prepare("SELECT * FROM activity_log ORDER BY at DESC LIMIT 200"),
+    // 변경 전·후 스냅샷(before_json/after_json)은 기록 상세의 이력 패널에서만 쓴다.
+    // 전체 응답의 절반이 넘어 여기서는 "이어서 하기"에 필요한 열만 읽는다(recordHistory()가 따로 제공).
+    db.prepare(
+      "SELECT id, entity_type, entity_id, action, reason, actor, at FROM activity_log ORDER BY at DESC LIMIT 60",
+    ),
     db.prepare("SELECT * FROM cost_line_types ORDER BY sort_order"),
     db.prepare(
       "SELECT * FROM job_runs WHERE job_key='daily_digest' ORDER BY started_at DESC LIMIT 1",
@@ -628,9 +632,9 @@ export async function workspace(db: D1Database) {
     });
   return {
     records,
-    claims,
+    // claims 전체(345건·186KB)는 근거·상세·캡처 화면에서만 필요해 GET /api/v1/claims로 분리했다.
+    // 홈이 쓰는 것은 아래 stale뿐이라 여기서 계산해 넘긴다.
     settings,
-    activity,
     recent,
     grades,
     stale: claims.filter(
