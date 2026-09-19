@@ -10,6 +10,7 @@ import {
 import type { Claim } from "../../domain/types/claim";
 import { defaultRecheck } from "../../domain/claim";
 import { api, jsonBody } from "../api/client";
+import { RecordTable, useViewMode } from "./Table";
 export type Row = Record<string, any>;
 export type WorkspaceData = {
   records: Record<string, Row[]>;
@@ -35,25 +36,21 @@ export type WorkspaceData = {
 export function GradeBadge({
   grade,
   estimated,
+  compact,
 }: {
   grade: string;
   estimated?: boolean;
+  compact?: boolean;
 }) {
-  const cls =
-    grade === "A"
-      ? "confirmed"
-      : grade === "B"
-        ? "estimated"
-        : grade === "D"
-          ? "fail"
-          : "unknown";
+  const g = ["A", "B", "C", "D"].includes(grade) ? grade : "X";
   return (
     <span
-      className={`badge ${cls}`}
-      title="종합 등급: 요건 → 남은 조치 → 수익성 순으로 판정"
+      className={`grade ${g}`}
+      title={`종합 등급 ${grade}${estimated ? " (추정)" : ""}: 요건 → 남은 조치 → 수익성 순으로 판정`}
+      aria-label={`등급 ${grade}${estimated ? " 추정" : ""}`}
     >
-      등급 {grade}
-      {estimated ? " (추정)" : ""}
+      {g === "X" ? "?" : grade}
+      {!compact && estimated ? "·" : ""}
     </span>
   );
 }
@@ -226,96 +223,160 @@ export function Home() {
           </button>
         </section>
       )}
-      <div className="overview-grid">
-        <div className="metric">
-          <span>조사 중인 상품</span>
+      <div className="kpis">
+        <Link className="kpi" to={recordUrl("readiness_items")}>
+          <span>판매 개시까지</span>
+          <strong>
+            {readinessOpen.length
+              ? `${readinessOpen.length}단계 남음`
+              : "준비 완료"}
+          </strong>
+          <small>
+            {readinessOpen
+              .slice(0, 3)
+              .map((r) => r.title)
+              .join(" · ") || "필수 사업 준비를 마쳤습니다"}
+          </small>
+        </Link>
+        <Link
+          className={`kpi ${blockers.length ? "warn" : ""}`}
+          to={recordUrl("tasks")}
+        >
+          <span>막힘</span>
+          <strong>{blockers.length}개</strong>
+          <small>
+            {blockers.length
+              ? Object.entries(
+                  blockers.reduce<Record<string, number>>((m, t) => {
+                    const k = label(t.blocked_kind ?? "internal");
+                    m[k] = (m[k] ?? 0) + 1;
+                    return m;
+                  }, {}),
+                )
+                  .map(([k, n]) => `${k} ${n}`)
+                  .join(" · ")
+              : "막힌 일이 없습니다"}
+          </small>
+        </Link>
+        <Link className="kpi" to="/claims">
+          <span>재확인 기한 지남</span>
+          <strong>{d.stale.length}개</strong>
+          <small>근거 재확인 대상</small>
+        </Link>
+        <Link className="kpi" to={recordUrl("products")}>
+          <span>상품</span>
           <strong>
             {
               products.filter(
                 (p) => !["live", "discontinued", "rejected"].includes(p.status),
               ).length
             }
-            <small>개</small>
+            개 진행 중
           </strong>
-          <Link to={recordUrl("products")}>상품 조사 보기 →</Link>
-        </div>
-        <div className="metric">
-          <span>먼저 풀어야 할 막힘</span>
-          <strong>
-            {blockers.length}
-            <small>개</small>
-          </strong>
-          <Link to={recordUrl("tasks")}>막힘·다음 행동 보기 →</Link>
-        </div>
-        <div className="metric">
-          <span>사업 준비</span>
-          <strong>
-            {readiness.length - readinessOpen.length}
-            <small> / {readiness.length}</small>
-          </strong>
-          <Link to={recordUrl("readiness_items")}>준비 체크리스트 →</Link>
-        </div>
-        <div className="metric">
-          <span>근거 재확인 기한 경과</span>
-          <strong>
-            {d.stale.length}
-            <small>개</small>
-          </strong>
-          <Link to="/claims">근거 확인하기 →</Link>
-        </div>
+          <small>
+            {["A", "B", "C", "D"]
+              .map(
+                (g) =>
+                  [
+                    g,
+                    Object.values(d.grades).filter((x) => x.grade === g).length,
+                  ] as const,
+              )
+              .filter(([, n]) => n)
+              .map(([g, n]) => `${g} ${n}`)
+              .join(" · ") || "등급 판정 전"}
+          </small>
+        </Link>
       </div>
       <div className="home-columns">
-        <section className="panel">
-          <div className="section-head">
-            <h2>무엇이 막혀 있나</h2>
-            <span className="kicker">오래된 순</span>
-          </div>
-          {!blockers.length && <p className="empty">막힌 일이 없습니다.</p>}
-          {blockers.map((t) => (
-            <div className="blocker" key={t.id}>
-              <Badge value="blocked" />{" "}
-              <small>
-                {daysSince(t.created_at)}일째 ·{" "}
-                {label(t.blocked_kind ?? "internal")} 대기
-                {t.recheck_at && ` · 재확인 ${t.recheck_at}`}
-                {t.recheck_at && t.recheck_at < todayStr && " (기한 지남)"}
-              </small>
-              <h3>{t.title}</h3>
-              <p>{t.blocked_reason}</p>
-              {t.unblock_condition && (
-                <p>
-                  <strong>풀리는 조건:</strong> {t.unblock_condition}
-                </p>
-              )}
-              <Link className="button" to={taskLink(t)}>
-                {t.rule_key === "decide_business_model"
-                  ? "사업 모델 검토하기"
-                  : "연결된 기록 열기"}
-              </Link>
-            </div>
-          ))}
+        <section>
           <div className="section-head">
             <h2>다음 행동</h2>
             <Link to={recordUrl("tasks")}>전체 보기</Link>
           </div>
-          {nextActions.map((t, i) => (
-            <Link className="action-row" key={t.id} to={taskLink(t)}>
-              <span className="step-number">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span>
-                <strong>{t.title}</strong>
-                <small>
-                  {t.detail ??
-                    "연결된 기록에서 확인하고 다음 단계로 진행하세요."}
-                </small>
-              </span>
-              <span>↗</span>
-            </Link>
-          ))}
-          {!nextActions.length && (
+          {blockers.length + nextActions.length ? (
+            <div className="rt-wrap">
+              <div className="rt-scroll">
+                <table className="rt">
+                  <colgroup>
+                    <col style={{ width: 84 }} />
+                    <col />
+                    <col style={{ width: 130 }} />
+                    <col style={{ width: 170 }} />
+                    <col style={{ width: 110 }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>상태</th>
+                      <th>할 일</th>
+                      <th>관련</th>
+                      <th>필요한 것</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...blockers, ...nextActions].map((t) => (
+                      <tr key={t.id}>
+                        <td>
+                          <Badge value={t.status} />
+                        </td>
+                        <td>
+                          <Link to={taskLink(t)}>{t.title}</Link>
+                        </td>
+                        <td className="muted">
+                          {catalog[t.entity_type]?.label ??
+                            label(t.entity_type ?? "")}
+                        </td>
+                        <td
+                          className="muted"
+                          title={t.unblock_condition ?? t.detail ?? ""}
+                        >
+                          {t.unblock_condition ?? t.detail ?? ""}
+                        </td>
+                        <td>
+                          <Link
+                            className="button secondary small"
+                            to={taskLink(t)}
+                          >
+                            {t.rule_key === "decide_business_model"
+                              ? "결정하기"
+                              : "열기"}
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="rt-mobile">
+                {[...blockers, ...nextActions].map((t) => (
+                  <Link className="rt-row" key={t.id} to={taskLink(t)}>
+                    <Badge value={t.status} />
+                    <div>
+                      <strong>{t.title}</strong>
+                      <small>
+                        {(catalog[t.entity_type]?.label ?? "") +
+                          ((t.unblock_condition ?? t.detail)
+                            ? " · " + (t.unblock_condition ?? t.detail)
+                            : "")}
+                      </small>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : (
             <p className="empty">현재 열린 할 일이 없습니다.</p>
           )}
+          <div className="rt-foot">
+            막힘은 오래된 순, 할 일은 우선순위 순입니다. 막힘 {blockers.length}
+            개 · 할 일 {nextActions.length}개
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Link className="cta" to="/capture">
+              캡처 올리고 근거로 연결
+            </Link>
+          </div>
         </section>
         <section className="panel">
           <h2>이어서 하기</h2>
@@ -1267,6 +1328,7 @@ export function Records({ children }: { children?: React.ReactNode }) {
     ),
     [error, setError] = useState(""),
     [deleteReason, setDeleteReason] = useState("");
+  const [view, setView] = useViewMode(type);
   const d = q.data,
     def = catalog[type];
   if (!def) return <main className="page">기록 종류가 없습니다.</main>;
@@ -1341,17 +1403,19 @@ export function Records({ children }: { children?: React.ReactNode }) {
         </div>
       </PageHead>
       <ErrorBox error={error} />
-      <div className="section-tabs">
-        {relatedTypes.map((t) => (
-          <Link
-            className={t === type ? "active" : ""}
-            key={t}
-            to={recordUrl(t)}
-          >
-            {catalog[t].label}
-          </Link>
-        ))}
-      </div>
+      {relatedTypes.length > 1 && (
+        <div className="section-tabs">
+          {relatedTypes.map((t) => (
+            <Link
+              className={t === type ? "active" : ""}
+              key={t}
+              to={recordUrl(t)}
+            >
+              {catalog[t].label}
+            </Link>
+          ))}
+        </div>
+      )}
       {((editing && record) || adding) && (
         <RecordEditor
           key={(editing ? record?.id : "new") + type}
@@ -1386,8 +1450,46 @@ export function Records({ children }: { children?: React.ReactNode }) {
               onChange={(e) => setSearch(e.target.value)}
             />
             <span className="muted">{filtered.length}개 표시</span>
+            <span className="seg" role="group" aria-label="보기 방식">
+              <button
+                type="button"
+                className={view === "table" ? "on" : ""}
+                onClick={() => setView("table")}
+              >
+                표
+              </button>
+              <button
+                type="button"
+                className={view === "cards" ? "on" : ""}
+                onClick={() => setView("cards")}
+              >
+                카드
+              </button>
+              {type === "products" && (
+                <button
+                  type="button"
+                  className={view === "board" ? "on" : ""}
+                  onClick={() => setView("board")}
+                >
+                  단계별
+                </button>
+              )}
+            </span>
           </div>
-          {type === "products" ? (
+          {view === "table" ? (
+            <RecordTable
+              type={type}
+              rows={filtered}
+              data={d}
+              foot={
+                type === "products"
+                  ? "등급 = 요건 게이트 → 남은 조치 → 수익성 순서 판정. 미확인 금액은 비워 둡니다(0으로 계산하지 않음)."
+                  : type === "tasks"
+                    ? "상태는 파생 규칙이 계산하며 직접 바꾸지 않습니다. 행을 누르면 근거·이력이 열립니다."
+                    : undefined
+              }
+            />
+          ) : view === "board" && type === "products" ? (
             <ProductBoard products={filtered} grades={d.grades} />
           ) : (
             <div className="record-grid">

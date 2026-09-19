@@ -108,13 +108,15 @@ export async function hasValidSession(c: any) {
 }
 export const authRoutes = new Hono<AppEnv>();
 const passSchema = z.object({ passphrase: z.string().min(12).max(200) });
-authRoutes.get("/auth/status", async (c) =>
-  c.json({
+authRoutes.get("/auth/status", async (c) => {
+  // 개발·데스크톱 우회(auth.ts와 같은 조건)에서는 화면도 로그인을 요구하지 않는다.
+  const bypass = c.env.APP_ENV === "development" || c.env.APP_ENV === "desktop";
+  return c.json({
     mode: c.env.AUTH_MODE ?? "passphrase",
-    configured: await isConfigured(c.env.DB),
-    authenticated: await hasValidSession(c),
-  }),
-);
+    configured: bypass || (await isConfigured(c.env.DB)),
+    authenticated: bypass || (await hasValidSession(c)),
+  });
+});
 authRoutes.post("/auth/setup", async (c) => {
   if (await isConfigured(c.env.DB))
     throw new AppError(
