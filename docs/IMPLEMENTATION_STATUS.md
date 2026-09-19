@@ -1,5 +1,21 @@
 # 구현 상태 · 2026-09-18 (검토 반영 + M2)
 
+## 2026-09-19 · 트랙 C-1 완료 · Cloudflare 배포 + 비밀문구 로그인
+
+주소: **https://seller.a98763969.workers.dev** (단일 Worker, 정적 자산 포함, `run_worker_first: ["/api/*"]`). 계정 `7c915f536fa7c52317bc29abed91a540`.
+
+| 항목 | 실제 확인 결과 |
+|---|---|
+| D1 `seller-db`(5c241e6d…) 원격 마이그레이션 | `0001_core.sql`은 이미 적용돼 있었고 `0002_research.sql`·`0003_listings.sql`을 이번에 원격 적용(49개 명령 성공) |
+| R2 버킷 | `seller-attachments`, `seller-backups` 신규 생성(Standard) |
+| Worker 배포 | `pnpm deploy`(tsc → vite build → wrangler deploy) 성공. 바인딩 DB·ATTACHMENTS·BACKUPS·ASSETS, vars `APP_ENV=production`, `AUTH_MODE=passphrase` |
+| `SESSION_SECRET` | 62자 난수를 생성해 `wrangler secret put`으로 등록. 값은 어디에도 기록하지 않음 |
+| 비로그인 차단 | `GET /api/v1/workspace` → 401 `LOGIN_REQUIRED`. `GET /` → 200 HTML(로그인 화면). `GET /api/v1/auth/status` → `configured:false` |
+| CSRF | 다른 Origin에서 `POST /api/v1/auth/setup` → 403 `ORIGIN_REJECTED` |
+| 미실시 | 실제 브라우저에서 비밀문구 설정 → 로그인 → 초기 조사 불러오기 → 첨부 업로드(R2) 왕복. 사용자님이 첫 접속 때 진행하면 확인됨 |
+
+로그인 방식은 Cloudflare Access 대신 앱 자체 비밀문구(PBKDF2-SHA256 150k, HMAC 서명 쿠키 30일, 5회 실패 시 15분 잠금, 로그아웃 시 세션 버전 증가)다. `AUTH_MODE=access`로 바꾸면 기존 Access JWT 검사가 다시 켜진다. 배포 전 로컬 검증: 도메인 49 + Workers API 18 + 데스크톱 25 = 92개 테스트 통과, `tests/api/auth.test.ts` 포함.
+
 ## 2026-09-19 · 트랙 A 작업 보존 / 모바일 우선 재계획 대기
 
 사용자님의 휴대폰 사용 요구에 따라 데스크톱 작업을 중단하고 현재 코드와 인계 자료를 보존한다. **트랙 A 완료가 아니며 B·C는 시작하지 않았다.** 상세 파일 목록과 검증 범위는 [모바일 재계획 인계](HANDOFF_MOBILE_REPLAN.md)를 참고한다. 웹 배포 우선 변경은 DECISIONS IMP-10의 미승인 제안이다.
@@ -26,7 +42,7 @@
 | 2. `0001_core.sql` 로컬·원격 적용 | 확인      | Drizzle 스키마에서 생성한 13개 테이블. 전용 원격 `seller-db` 생성 및 원격/로컬 apply 성공                                                         |
 | 3. UI Claim 생성·강등·재조회      | 확인      | 실제 브라우저에서 첨부 없는 확인 가격 입력 → 추정 강등 메시지 → 새로고침 후 같은 값 조회                                                          |
 | 4. ZIP → 빈 로컬 DB 복원          | 확인      | Workers API 테스트에서 독립 빈 D1/R2로 Claim·첨부 원본 복원 후 동등성 확인. 실제 개발 서버의 ZIP도 새 로컬 D1으로 restore.ts 미리보기 → 적용 완료 |
-| 5. 배포 후 모든 경로 Access 차단  | 원격 대기 | API JWT 미들웨어 및 로컬 미인증/위조 토큰 거절 테스트 구현. 배포 및 도메인 전체 Access 로그인 검증은 미실시                                       |
+| 5. 배포 후 모든 경로 로그인 차단  | 확인      | 2026-09-19 배포 후 `/api/v1/workspace` 401, 위조 쿠키·교차 출처 거절 테스트 통과. 방식은 Access가 아닌 앱 비밀문구(위 2026-09-19 절 참고)                    |
 | 6. costing.test.ts 회귀 테스트    | 확인      | 5,900원 고객 청구 배송비를 지출로 사용하면 거절, 미확인 전파, 증빙 강등 등                                                                        |
 
 **M0·M1 로컬 구현 완료. 골격의 원격 Access 기준은 보류.** 사용자 지시 “사이트 마저 구현. 클라우드플레어는 이따 해도 됨”에 따라 로컬 구현을 진행했다(DECISIONS IMP-01~03). 원격 조건을 로컬 테스트로 대체해 통과 표시하지 않는다.
@@ -87,7 +103,7 @@ Vite와 마이그레이션 스크립트는 같은 값을 사용한다. 기본값
 
 ## 남은 범위
 
-1. Cloudflare R2/Worker/Access 설정, 원격 `0002_research.sql` 적용, 모든 경로 로그인 보호의 실제 배포 검증(사용자 요청으로 보류).
+1. ~~Cloudflare R2/Worker 설정, 원격 마이그레이션, 로그인 보호 배포 검증~~ → 2026-09-19 완료(위 절). 남은 것: 서버 백업 Job(C-2), 모바일 화면(M), 표 화면(B).
 2. PLAN M2 이후의 판매 채널 등록, 주문·정산·반품 운영 및 실제 외부 자동화. 이번 로컬 M0·M1 범위에는 포함하지 않는다.
 3. 사업 모델, 상품 권리·안전 요건, 실제 견적·환율 등 미결정 정보는 사용자 조사·판단으로 채운다. 샘플 계산값을 실제 견적으로 자동 입력하지 않는다.
 
@@ -101,4 +117,4 @@ Vite와 마이그레이션 스크립트는 같은 값을 사용한다. 기본값
 - P4: `Foundation.tsx`·`domain/costing.ts` 삭제. DATA_MODEL·PLAN·DECISIONS(IMP-04~07) 동기화.
 - M2: `listings` 테이블(0003_listings.sql)·기록 화면, 판매 중 조건(채널 상품 번호·결정 판매가 일치·이미지 출처·노출 확인일), 상품 `listing_ready→live`, `live↔paused`, 파생 작업 `product_needs_listing`, 수동 절차 SOP 2종 자동 생성, 운영 모드 판정. `tests/api/m2.test.ts`.
 - 검증: `pnpm typecheck`, `pnpm test`(도메인 46 + Workers API 16), `pnpm build`, 로컬 화면 확인.
-- 여전히 없는 것: Cloudflare 원격 배포·Access 검증(보류), 주문·정산(M3), 외부 연동(M4).
+- 여전히 없는 것: 주문·정산(M3), 외부 연동(M4). (Cloudflare 배포는 2026-09-19 완료)
