@@ -71,7 +71,18 @@ describe("listing draft", () => {
         gate_result: "unknown",
       },
     } as any);
-    expect(t.notices.some((n) => n.includes("KC 인증을 받지 않았"))).toBe(true);
+    // 국가기술표준원이 정한 문구 그대로여야 한다(요약·의역 금지).
+    expect(t.notices).toContain("이 제품은 구매대행을 통하여 유통되는 제품임");
+    expect(
+      t.notices.some((n) =>
+        n.includes(
+          "「전기용품 및 생활용품 안전관리법」에 따른 안전관리대상 제품임",
+        ),
+      ),
+    ).toBe(true);
+    expect(t.notices.some((n) => n.includes("묶어 한 번에 고지할 수 없"))).toBe(
+      true,
+    );
     const f = buildListingDraft({
       ...base,
       profile: {
