@@ -120,10 +120,22 @@ export function Home() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const d = q.data;
+  const [progress, setProgress] = useState("");
   async function seed() {
     setBusy(true);
+    setError("");
     try {
-      const r = await api<Row>("/seed", jsonBody("POST", {}));
+      // 서버는 한 번에 일부 행만 적용하고 next를 돌려준다(Workers 요청당 D1 호출 상한). 끝날 때까지 반복한다.
+      let r: Row = { next: 0, batch_id: undefined };
+      while (r.next !== null && r.next !== undefined) {
+        r = await api<Row>(
+          "/seed",
+          jsonBody("POST", { from: r.next, limit: 10, batch_id: r.batch_id }),
+        );
+        if (r.already_seeded) break;
+        setProgress(`${Math.min(r.next ?? r.total, r.total)}/${r.total}`);
+      }
+      setProgress("");
       if (r.failed)
         throw new Error(
           `초기 조사 ${r.failed}개 행 실패: ${r.results
@@ -208,7 +220,9 @@ export function Home() {
             </p>
           </div>
           <button disabled={busy} onClick={seed}>
-            {busy ? "초기 기록을 연결하는 중…" : "초기 조사 기록 불러오기"}
+            {busy
+              ? `초기 기록을 연결하는 중… ${progress}`
+              : "초기 조사 기록 불러오기"}
           </button>
         </section>
       )}
@@ -1924,19 +1938,43 @@ export function ResearchImport() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     qc = useQueryClient();
+  const [progress, setProgress] = useState("");
   async function run(apply = false) {
     if (!file) return;
     setBusy(true);
     setError("");
     try {
-      const r = await api<Row>("/research-import" + (apply ? "?apply=1" : ""), {
-        method: "POST",
-        headers: {
-          "X-Filename": encodeURIComponent(file.name),
-          ...(apply ? { "X-Preview-Hash": report!.hash } : {}),
-        },
-        body: file,
-      });
+      // 조각 단위로 반복 호출한다(Workers 요청당 D1 호출 상한). 미리보기는 결과를 이어 붙이고, 적용은 서버 배치 행에 누적된다.
+      let r: Row = { next: 0 };
+      const previewRows: Row[] = [];
+      while (r.next !== null && r.next !== undefined) {
+        r = await api<Row>(
+          `/research-import?from=${r.next}&limit=10${apply ? "&apply=1" : ""}`,
+          {
+            method: "POST",
+            headers: {
+              "X-Filename": encodeURIComponent(file.name),
+              ...(apply ? { "X-Preview-Hash": report!.hash } : {}),
+              ...(apply && r.batch_id ? { "X-Import-Batch": r.batch_id } : {}),
+            },
+            body: file,
+          },
+        );
+        if (!apply) previewRows.push(...r.results);
+        setProgress(`${Math.min(r.next ?? r.total, r.total)}/${r.total}`);
+      }
+      setProgress("");
+      if (!apply) {
+        const c = (st: string[]) =>
+          previewRows.filter((x) => st.includes(x.status)).length;
+        r = {
+          ...r,
+          results: previewRows,
+          ready: c(["ready"]),
+          failed: c(["failed"]),
+          skipped: c(["skipped"]),
+        };
+      }
       setReport(r);
       if (apply) await qc.invalidateQueries();
     } catch (e) {
@@ -1980,7 +2018,9 @@ export function ResearchImport() {
           )}
         </div>
         <ErrorBox error={error} />
-        {busy && <p role="status">행별 연결과 근거를 검증하는 중…</p>}
+        {busy && (
+          <p role="status">행별 연결과 근거를 검증하는 중… {progress}</p>
+        )}
         {report && (
           <>
             <h3>{report.applied ? "적용 결과" : "적용 전 미리보기"}</h3>

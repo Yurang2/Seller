@@ -160,6 +160,7 @@ export async function researchImport(
   apply = false,
   expectedHash?: string,
   seed = false,
+  range?: ImportRange,
 ) {
   const headers: Record<string, string> = {
     상품: "상품ID",
@@ -762,11 +763,21 @@ export async function researchImport(
       message:
         "수식·가상 예시는 가져오지 않습니다. 앱 계산기가 저장된 입력으로 다시 계산합니다.",
     });
-  for (const op of ops) {
+  // Cloudflare Workers는 한 요청당 D1 호출(부속 요청) 1,000회가 상한이다. 행마다 기록·근거 서비스를 거치면
+  // 수십 회씩 쓰므로, 적용은 range 단위로 나눠 여러 요청에 걸쳐 진행한다(클라이언트가 next를 따라 반복).
+  const preResults = results.splice(0, results.length);
+  const from = Math.max(0, range?.from ?? 0);
+  const limit = Math.max(1, range?.limit ?? ops.length);
+  const slice = ops.slice(from, from + limit);
+  const next = from + slice.length < ops.length ? from + slice.length : null;
+  if (from === 0) results.push(...preResults);
+  let requirementItems: Row[] | null = null;
+  for (const op of slice) {
     try {
       let existing = await getRecord(db, op.type, op.record.id);
       if (op.type === "requirement_items") {
-        const same = (await listRecords(db, "requirement_items")).find(
+        requirementItems ??= await listRecords(db, "requirement_items");
+        const same = requirementItems.find(
           (i) =>
             i.profile_id === op.record.profile_id && i.key === op.record.key,
         );
@@ -791,8 +802,8 @@ export async function researchImport(
           : "새 기록 추가";
       if (apply) {
         // Stable external IDs share the same services as manual entry. Re-import is an upsert.
-        if (op.type !== "fx_rates" || !existing)
-          await saveRecord(
+        if (op.type !== "fx_rates" || !existing) {
+          const saved = await saveRecord(
             db,
             op.type,
             op.record,
@@ -800,6 +811,9 @@ export async function researchImport(
             `import:${hash.slice(0, 12)}`,
             true,
           );
+          if (op.type === "requirement_items" && requirementItems && !existing)
+            requirementItems.push(saved as Row);
+        }
         for (const c of op.claims ?? [])
           await upsertClaim(db, c, `import:${hash.slice(0, 12)}`);
       }
@@ -822,43 +836,82 @@ export async function researchImport(
       });
     }
   }
-  if (apply) {
-    const bid = ulid(),
-      at = new Date().toISOString();
-    const row = {
-      id: bid,
-      kind: "excel_research",
-      filename,
-      mapping_json: JSON.stringify({
-        version: 1,
-        external_ids: ids,
-        headers: Object.fromEntries(
-          Object.entries(workbook).map(([k, v]) => [k, v[0] ?? {}]),
-        ),
-      }),
-      rows_total: results.length,
-      rows_ok: results.filter((r) => r.status === "applied").length,
-      rows_failed: results.filter((r) => r.status === "failed").length,
-      results_json: JSON.stringify(results),
-      applied: 1,
-      created_at: at,
+  const count = (rs: Row[]) => ({
+    ready: rs.filter((r) => ["ready", "applied"].includes(r.status)).length,
+    failed: rs.filter((r) => r.status === "failed").length,
+    skipped: rs.filter((r) => r.status === "skipped").length,
+  });
+  if (!apply)
+    return {
+      hash,
+      applied: false,
+      done: next === null,
+      from,
+      next,
+      total: ops.length,
+      results,
+      ...count(results),
     };
+  // 적용: 첫 조각에서 배치 행을 만들고, 조각마다 결과를 덧붙이며, 마지막 조각에서 완료 처리·파생 작업 재계산.
+  const at = new Date().toISOString();
+  let bid = range?.batch_id ?? null;
+  let all: Row[];
+  if (from === 0 || !bid) {
+    bid = ulid();
+    all = results;
+    await db
+      .prepare(
+        "INSERT INTO import_batches(id,kind,filename,mapping_json,rows_total,rows_ok,rows_failed,results_json,applied,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+      )
+      .bind(
+        bid,
+        "excel_research",
+        filename,
+        JSON.stringify({
+          version: 1,
+          external_ids: ids,
+          headers: Object.fromEntries(
+            Object.entries(workbook).map(([k, v]) => [k, v[0] ?? {}]),
+          ),
+        }),
+        preResults.length + ops.length,
+        count(all).ready,
+        count(all).failed,
+        JSON.stringify(all),
+        0,
+        at,
+      )
+      .run();
+  } else {
+    const prev = await db
+      .prepare(
+        "SELECT results_json, applied FROM import_batches WHERE id=? AND filename=?",
+      )
+      .bind(bid, filename)
+      .first<{ results_json: string; applied: number }>();
+    if (!prev || prev.applied)
+      fail("이어서 적용할 가져오기 배치가 없습니다. 처음부터 다시 적용하세요.");
+    all = [...(JSON.parse(prev.results_json) as Row[]), ...results];
+    await db
+      .prepare(
+        "UPDATE import_batches SET results_json=?, rows_ok=?, rows_failed=? WHERE id=?",
+      )
+      .bind(JSON.stringify(all), count(all).ready, count(all).failed, bid)
+      .run();
+  }
+  if (next === null) {
+    const row = await db
+      .prepare("SELECT * FROM import_batches WHERE id=?")
+      .bind(bid)
+      .first<Row>();
     await db.batch([
-      db
-        .prepare(
-          `INSERT INTO import_batches(${Object.keys(row).join(",")}) VALUES(${Object.keys(
-            row,
-          )
-            .map(() => "?")
-            .join(",")})`,
-        )
-        .bind(...Object.values(row)),
+      db.prepare("UPDATE import_batches SET applied=1 WHERE id=?").bind(bid),
       audit(
         db,
         "import_batches",
         bid,
         null,
-        row,
+        { ...row, applied: 1 },
         "행별 적용 결과",
         "user",
         "import",
@@ -868,59 +921,59 @@ export async function researchImport(
   }
   return {
     hash,
-    applied: apply,
-    results,
-    ready: results.filter((r) => ["ready", "applied"].includes(r.status))
-      .length,
-    failed: results.filter((r) => r.status === "failed").length,
-    skipped: results.filter((r) => r.status === "skipped").length,
+    applied: true,
+    done: next === null,
+    from,
+    next,
+    total: ops.length,
+    batch_id: bid,
+    results: next === null ? all : results,
+    ...count(all),
   };
 }
-export async function seedResearch(db: D1Database) {
-  await initialize(db);
-  for (const n of seedNotes) {
-    const nid = await stableId("note:" + n.key);
-    if (!(await getRecord(db, "notes", nid)))
+export type ImportRange = { from?: number; limit?: number; batch_id?: string };
+export async function seedResearch(db: D1Database, range?: ImportRange) {
+  const from = range?.from ?? 0;
+  if (from === 0) {
+    await initialize(db);
+    for (const n of seedNotes) {
+      const nid = await stableId("note:" + n.key);
+      if (!(await getRecord(db, "notes", nid)))
+        await saveRecord(
+          db,
+          "notes",
+          { id: nid, title: n.title, type: n.type, body_md: n.body },
+          "기획서 초기 지식",
+          "import:seed",
+        );
+    }
+    const channelId = await stableId("channel:smartstore");
+    if (!(await getRecord(db, "channels", channelId)))
       await saveRecord(
         db,
-        "notes",
-        { id: nid, title: n.title, type: n.type, body_md: n.body },
-        "기획서 초기 지식",
+        "channels",
+        { id: channelId, name: "스마트스토어", type: "smartstore" },
+        "D-03 채택 · 수수료와 API 연동은 미확인",
         "import:seed",
       );
+    const previous = await db
+      .prepare("SELECT key FROM settings WHERE key='seed_research_v1'")
+      .first();
+    if (previous) return { already_seeded: true, done: true, next: null };
   }
-  const channelId = await stableId("channel:smartstore");
-  if (!(await getRecord(db, "channels", channelId)))
-    await saveRecord(
-      db,
-      "channels",
-      { id: channelId, name: "스마트스토어", type: "smartstore" },
-      "D-03 채택 · 수수료와 API 연동은 미확인",
-      "import:seed",
-    );
-  const previous = await db
-    .prepare("SELECT key FROM settings WHERE key='seed_research_v1'")
-    .first();
-  if (previous) return { already_seeded: true };
   const workbook = seedWorkbook as Workbook;
-  const preview = await researchImport(
-    db,
-    workbook,
-    "초기 조사 · SEED_RESEARCH.md",
-    false,
-    undefined,
-    true,
-  );
-  if (preview.failed) fail("초기 조사 검증 실패");
+  // 시드 워크북은 코드에 고정돼 있어 별도 미리보기 없이 조각 단위로 바로 적용한다(행별 실패는 결과에 남는다).
+  const hash = await sha256(new TextEncoder().encode(JSON.stringify(workbook)));
   const result = await researchImport(
     db,
     workbook,
     "초기 조사 · SEED_RESEARCH.md",
     true,
-    preview.hash,
+    hash,
     true,
+    range ? { ...range, from } : undefined,
   );
-  if (!result.failed) {
+  if (result.done && !result.failed) {
     const charId = await stableId("char:핑구");
     await upsertClaim(
       db,

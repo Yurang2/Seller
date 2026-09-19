@@ -29,8 +29,19 @@ workspaceRoutes.post("/initialize", async (c) => {
   await initialize(c.env.DB);
   return c.json({ ok: true });
 });
+const rangeSchema = z.object({
+  from: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(25).default(10),
+  batch_id: z.string().optional(),
+});
+// 조각 단위 적용: Workers의 요청당 D1 호출 상한(1,000) 때문에 클라이언트가 next를 따라 반복 호출한다.
 workspaceRoutes.post("/seed", async (c) =>
-  c.json(await seedResearch(c.env.DB)),
+  c.json(
+    await seedResearch(
+      c.env.DB,
+      rangeSchema.parse((await c.req.json().catch(() => ({}))) ?? {}),
+    ),
+  ),
 );
 workspaceRoutes.get("/records/:type", async (c) =>
   c.json({
@@ -78,6 +89,11 @@ workspaceRoutes.delete("/records/:type/:id", async (c) => {
 });
 workspaceRoutes.post("/research-import", async (c) => {
   const bytes = new Uint8Array(await c.req.arrayBuffer());
+  const range = rangeSchema.parse({
+    from: Number(c.req.query("from") ?? 0),
+    limit: Number(c.req.query("limit") ?? 10),
+    batch_id: c.req.header("X-Import-Batch") || undefined,
+  });
   return c.json(
     await researchImport(
       c.env.DB,
@@ -85,6 +101,8 @@ workspaceRoutes.post("/research-import", async (c) => {
       decodeURIComponent(c.req.header("X-Filename") ?? "research.xlsx"),
       c.req.query("apply") === "1",
       c.req.header("X-Preview-Hash"),
+      false,
+      range,
     ),
   );
 });
