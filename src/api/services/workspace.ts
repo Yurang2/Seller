@@ -576,6 +576,10 @@ export async function workspace(db: D1Database) {
     ...types.map((t) => db.prepare(listSql(t))),
     db.prepare("SELECT * FROM settings"),
     db.prepare("SELECT * FROM activity_log ORDER BY at DESC LIMIT 200"),
+    db.prepare("SELECT * FROM cost_line_types ORDER BY sort_order"),
+    db.prepare(
+      "SELECT * FROM job_runs WHERE job_key='daily_digest' ORDER BY started_at DESC LIMIT 1",
+    ),
   ]);
   const records: Record<string, Row[]> = Object.fromEntries(
     types.map((t, i) => [t, res[i].results.map((r) => decode(r, t)!)]),
@@ -585,6 +589,8 @@ export async function workspace(db: D1Database) {
     res[types.length].results.map((r) => [r.key, JSON.parse(r.value_json)]),
   );
   const activity = res[types.length + 1].results;
+  const costLines = res[types.length + 2].results;
+  const digestRow = res[types.length + 3].results[0] ?? null;
   const seen = new Set<string>();
   const recent = activity
     .filter(
@@ -633,24 +639,8 @@ export async function workspace(db: D1Database) {
         (!catalog[c.owner_type] ||
           records[c.owner_type]?.some((r) => r.id === c.owner_id)),
     ),
-    cost_line_types: (
-      await db
-        .prepare("SELECT * FROM cost_line_types ORDER BY sort_order")
-        .all()
-    ).results,
-    last_digest: (await db
-      .prepare(
-        "SELECT * FROM job_runs WHERE job_key='daily_digest' ORDER BY started_at DESC LIMIT 1",
-      )
-      .first<Row>())
-      ? decodeJob(
-          (await db
-            .prepare(
-              "SELECT * FROM job_runs WHERE job_key='daily_digest' ORDER BY started_at DESC LIMIT 1",
-            )
-            .first<Row>())!,
-        )
-      : null,
+    cost_line_types: costLines,
+    last_digest: digestRow ? decodeJob(digestRow) : null,
     automation: "none",
     mode:
       settings.mode_override === "operations" ||
