@@ -24,6 +24,7 @@
   // Cron Triggers는 M4(자동화)에서 Job 실행기와 함께 추가한다. 실행 코드 없는 스케줄은 두지 않는다(R-10).
   "vars": {
     "APP_ENV": "production",
+    "AUTH_MODE": "passphrase",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
   },

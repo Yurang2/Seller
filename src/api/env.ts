@@ -8,5 +8,7 @@ export interface Env {
   ACCESS_TEAM_DOMAIN: string;
   ACCESS_AUD: string;
   ENCRYPTION_KEY?: string;
+  AUTH_MODE?: string;
+  SESSION_SECRET?: string;
 }
 export type AppEnv = { Bindings: Env; Variables: { actor: string } };

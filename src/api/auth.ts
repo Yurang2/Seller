@@ -1,11 +1,14 @@
 import { createMiddleware } from "hono/factory";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { AppEnv } from "./env";
+import { hasValidSession } from "./passphrase";
 const keysets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 export const auth = createMiddleware<AppEnv>(async (c, next) => {
   const url = new URL(c.req.url);
-  const local = (url.protocol === "app:" && url.host === "seller") ||
-    (["http:", "https:"].includes(url.protocol) && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname));
+  const local =
+    (url.protocol === "app:" && url.host === "seller") ||
+    (["http:", "https:"].includes(url.protocol) &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname));
   if (c.env.APP_ENV === "desktop" && local) {
     c.set("actor", "user");
     return next();
@@ -13,6 +16,23 @@ export const auth = createMiddleware<AppEnv>(async (c, next) => {
   if (c.env.APP_ENV === "development") {
     c.set("actor", "user");
     return next();
+  }
+  // 기본 로그인 방식: 비밀문구 + 서명 쿠키(passphrase.ts). AUTH_MODE=access 일 때만 Cloudflare Access JWT를 본다.
+  if ((c.env.AUTH_MODE ?? "passphrase") !== "access") {
+    if (await hasValidSession(c)) {
+      c.set("actor", "user");
+      return next();
+    }
+    return c.json(
+      {
+        error: {
+          code: "LOGIN_REQUIRED",
+          message: "로그인이 필요합니다.",
+          details: null,
+        },
+      },
+      401,
+    );
   }
   const token = c.req.header("Cf-Access-Jwt-Assertion");
   if (

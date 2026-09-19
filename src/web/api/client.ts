@@ -1,6 +1,10 @@
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/v1${path}`, init);
   const json: unknown = await res.json();
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    // 세션이 끝났다. 로그인 화면으로 돌아간다.
+    window.dispatchEvent(new Event("seller:login-required"));
+  }
   if (!res.ok) {
     const err = json as { error?: { message?: string; details?: unknown } };
     const details = err.error?.details;

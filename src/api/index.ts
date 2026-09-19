@@ -9,8 +9,13 @@ import { saveAttachment } from "./services/attachments";
 import { exportArchive, restoreArchive } from "./exporters/archive";
 import { workspaceRoutes } from "./routes/workspace";
 import { researchRoutes } from "./routes/research";
+import { authRoutes } from "./passphrase";
 const app = new Hono<AppEnv>();
-app.use("/api/*", auth);
+// 로그인 관련 경로는 인증 없이 열리되, 다른 출처 차단(아래 Origin 검사)은 그대로 받는다.
+app.use("/api/*", async (c, next) => {
+  if (/^\/api\/v1\/auth\//.test(new URL(c.req.url).pathname)) return next();
+  return auth(c, next);
+});
 app.use("/api/*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
@@ -137,6 +142,7 @@ app.post("/api/v1/import", async (c) => {
     ),
   );
 });
+app.route("/api/v1", authRoutes);
 app.route("/api/v1", workspaceRoutes);
 app.route("/api/v1", researchRoutes);
 app.notFound((c) =>

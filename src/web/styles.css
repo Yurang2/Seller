@@ -1347,3 +1347,27 @@ th {
   align-items: center;
   text-decoration: none;
 }
+
+.login-page {
+  display: grid;
+  place-items: center;
+  min-height: 80vh;
+}
+.login {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 0.9rem;
+}
+.login label {
+  display: grid;
+  gap: 0.3rem;
+}
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
