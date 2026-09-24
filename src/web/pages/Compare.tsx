@@ -45,11 +45,15 @@ function WebLink({ url }: { url: unknown }) {
   );
 }
 
-export function Compare() {
-  const { productId } = useParams(),
+export function Compare({
+  embeddedProductId,
+}: { embeddedProductId?: string } = {}) {
+  const { productId: routeProductId } = useParams(),
     navigate = useNavigate(),
     q = useWorkspace(),
     cq = useClaims();
+  const productId = embeddedProductId ?? routeProductId;
+  const Container = embeddedProductId ? "div" : "main";
   const [editing, setEditing] = useState<{
     claim: Claim;
     currency: string;
@@ -70,10 +74,10 @@ export function Compare() {
   });
   if (!d || !claims)
     return (
-      <main className="page">
+      <Container className={embeddedProductId ? "" : "page"}>
         <ErrorBox error={q.error || cq.error} />
         <p>비교 자료를 불러오는 중…</p>
-      </main>
+      </Container>
     );
   const p = d.records.products.find((r) => r.id === productId);
   const china = d.records.offers.filter((r) => r.product_id === p?.id);
@@ -148,30 +152,36 @@ export function Compare() {
     );
   }
   return (
-    <main className="page compare-page">
-      <PageHead
-        eyebrow="COMPARE / 상품 조사"
-        title="중국·한국 판매처 비교"
-        description="동일 상품의 옵션·수량·배송 조건을 맞춰 보고, 링크와 가격 근거를 함께 기록하세요."
-      />
-      <label className="compare-product">
-        비교할 상품
-        <select
-          value={p?.id ?? ""}
-          onChange={(e) => {
-            setForm(null);
-            setEditing(null);
-            navigate(`/compare/${e.target.value}`);
-          }}
-        >
-          <option value="">상품을 선택하세요</option>
-          {d.records.products.map((r) => (
-            <option key={r.id} value={r.id}>
-              {title(r)}
-            </option>
-          ))}
-        </select>
-      </label>
+    <Container
+      className={embeddedProductId ? "compare-page" : "page compare-page"}
+    >
+      {!embeddedProductId && (
+        <>
+          <PageHead
+            eyebrow="COMPARE / 상품 조사"
+            title="중국·한국 판매처 비교"
+            description="동일 상품의 옵션·수량·배송 조건을 맞춰 보고, 링크와 가격 근거를 함께 기록하세요."
+          />
+          <label className="compare-product">
+            비교할 상품
+            <select
+              value={p?.id ?? ""}
+              onChange={(e) => {
+                setForm(null);
+                setEditing(null);
+                navigate(`/compare/${e.target.value}`);
+              }}
+            >
+              <option value="">상품을 선택하세요</option>
+              {d.records.products.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {title(r)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
       {!p ? (
         <p>
           상품을 선택하면 연결된 중국 오퍼와 한국 판매처가 나타납니다.{" "}
@@ -180,7 +190,7 @@ export function Compare() {
       ) : (
         <>
           <p>
-            <Link to={recordUrl("products", p.id)}>
+            <Link to={recordUrl("products", p.id) + "?tab=cost"}>
               상품 상세·원가 계산·가격 결정 →
             </Link>
           </p>
@@ -363,13 +373,15 @@ export function Compare() {
             ) : (
               <p>
                 저장된 원가가 없습니다.{" "}
-                <Link to={recordUrl("products", p.id)}>원가 계산 시작 →</Link>
+                <Link to={recordUrl("products", p.id) + "?tab=cost"}>
+                  원가 계산 시작 →
+                </Link>
               </p>
             )}
           </section>
         </>
       )}
-    </main>
+    </Container>
   );
 }
 

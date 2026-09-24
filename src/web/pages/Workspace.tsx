@@ -11,6 +11,7 @@ import type { Claim } from "../../domain/types/claim";
 import { defaultRecheck } from "../../domain/claim";
 import { api, jsonBody } from "../api/client";
 import { RecordTable, useViewMode } from "./Table";
+import { ProductNavigation, useProductSection } from "./ProductNavigation";
 export type Row = Record<string, any>;
 export type WorkspaceData = {
   records: Record<string, Row[]>;
@@ -1368,6 +1369,9 @@ export function ClaimValue({ claim }: { claim: Claim }) {
   );
 }
 export function Records({ children }: { children?: React.ReactNode }) {
+  const productSection = useProductSection();
+  const MetadataContainer =
+    useParams().type === "products" ? "details" : "section";
   const { type = "notes", id } = useParams(),
     q = useWorkspace(),
     navigate = useNavigate(),
@@ -1399,21 +1403,23 @@ export function Records({ children }: { children?: React.ReactNode }) {
       JSON.stringify(r).toLowerCase().includes(search.toLowerCase()),
     );
   const relatedTypes =
-    [
-      [
-        "products",
-        "characters",
-        "product_variants",
-        "costings",
-        "market_offers",
-      ],
-      ["compliance_profiles", "requirement_items"],
-      ["suppliers", "offers", "supplier_messages"],
-      ["shipping_scenarios", "shipping_legs", "forwarders", "rate_cards"],
-      ["notes", "decisions", "links", "sops"],
-      ["channels", "listings", "orders", "sops"],
-      ["readiness_items", "fx_rates"],
-    ].find((g) => g.includes(type)) ?? [];
+    type === "products" && record
+      ? []
+      : ([
+          [
+            "products",
+            "characters",
+            "product_variants",
+            "costings",
+            "market_offers",
+          ],
+          ["compliance_profiles", "requirement_items"],
+          ["suppliers", "offers", "supplier_messages"],
+          ["shipping_scenarios", "shipping_legs", "forwarders", "rate_cards"],
+          ["notes", "decisions", "links", "sops"],
+          ["channels", "listings", "orders", "sops"],
+          ["readiness_items", "fx_rates"],
+        ].find((g) => g.includes(type)) ?? []);
   const claims = record
     ? (claimsQuery.data ?? []).filter(
         (c) => c.owner_type === type && c.owner_id === record.id,
@@ -1595,158 +1601,174 @@ export function Records({ children }: { children?: React.ReactNode }) {
         </>
       ) : (
         <>
+          {type === "products" && <ProductNavigation id={record.id} />}
           {children}
-          <section className="panel">
-            <div className="detail-grid">
-              {Object.entries(def.fields).map(([k, f]) => {
-                let v = record[k];
-                if (v == null || v === "") return null;
-                if (f.ref) {
-                  const ref = d.records[f.ref]?.find((r) => r.id === v);
+          {(type !== "products" ||
+            ["overview", "history"].includes(productSection)) && (
+            <MetadataContainer className="panel">
+              {type === "products" && <summary>기본 정보·옵션</summary>}
+              <div className="detail-grid">
+                {Object.entries(def.fields).map(([k, f]) => {
+                  let v = record[k];
+                  if (v == null || v === "") return null;
+                  if (f.ref) {
+                    const ref = d.records[f.ref]?.find((r) => r.id === v);
+                    return (
+                      <div key={k}>
+                        <dt>{f.label.replace(/\s*\[.*\]/, "")}</dt>
+                        <dd>
+                          <Link to={recordUrl(f.ref, v)}>
+                            {ref ? title(ref) : v}
+                          </Link>
+                        </dd>
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={k}>
+                    <div
+                      key={k}
+                      className={
+                        f.type === "long" || f.type === "json" ? "wide" : ""
+                      }
+                    >
                       <dt>{f.label.replace(/\s*\[.*\]/, "")}</dt>
                       <dd>
-                        <Link to={recordUrl(f.ref, v)}>
-                          {ref ? title(ref) : v}
-                        </Link>
+                        {f.options ? (
+                          <Badge value={v} />
+                        ) : f.type === "json" ? (
+                          <StructuredValue value={v} />
+                        ) : (
+                          String(v)
+                        )}
                       </dd>
                     </div>
                   );
-                }
-                return (
-                  <div
-                    key={k}
-                    className={
-                      f.type === "long" || f.type === "json" ? "wide" : ""
-                    }
-                  >
-                    <dt>{f.label.replace(/\s*\[.*\]/, "")}</dt>
-                    <dd>
-                      {f.options ? (
-                        <Badge value={v} />
-                      ) : f.type === "json" ? (
-                        <StructuredValue value={v} />
-                      ) : (
-                        String(v)
-                      )}
-                    </dd>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-          {!!claims.length && (
-            <section className="panel">
-              <h2>확인할 값과 근거</h2>
-              <div className="claims-grid">
-                {claims.map((c) => (
-                  <button
-                    className="claim-card"
-                    key={c.id}
-                    onClick={() => setActiveClaim(c)}
-                  >
-                    <span>{claimLabels[c.field_key] ?? c.field_key}</span>
-                    <div>
-                      <ClaimValue claim={c} />
-                    </div>
-                    <small>{c.source_ref ?? "출처를 연결하세요."}</small>
-                    <small
-                      className={
-                        c.recheck_by < new Date().toISOString().slice(0, 10)
-                          ? "overdue"
-                          : ""
-                      }
-                    >
-                      재확인 {c.recheck_by} · 증빙 {c.attachment_ids.length}개
-                    </small>
-                  </button>
-                ))}
+                })}
               </div>
-            </section>
+            </MetadataContainer>
           )}
-          <section className="panel">
-            <h2>연결된 기록</h2>
-            <div className="related-links">
-              {Object.entries(catalog).flatMap(([other, definition]) =>
-                Object.entries(definition.fields)
-                  .filter(([, f]) => f.ref === type)
-                  .flatMap(([key]) =>
-                    d.records[other]
-                      .filter((r) => r[key] === id)
-                      .map((r) => (
-                        <Link key={other + r.id} to={recordUrl(other, r.id)}>
-                          <span>{definition.label}</span>
-                          <strong>{title(r)}</strong>
-                        </Link>
-                      )),
-                  ),
-              )}
-              {related.map((l) => {
-                const other = l.from_id === id ? l.to_type : l.from_type,
-                  oid = l.from_id === id ? l.to_id : l.from_id;
-                return (
-                  <Link key={l.id} to={recordUrl(other, oid)}>
-                    {l.note || label(l.relation)} →{" "}
-                    {catalog[other]?.label ?? other}
-                  </Link>
-                );
-              })}
-            </div>
-            <Link to={recordUrl("links")}>기록 간 연결 추가 →</Link>
-          </section>
-          <section className="panel">
-            <h2>왜 이렇게 됐나요?</h2>
-            {history.isLoading && <p className="muted">이력 불러오는 중…</p>}
-            {(history.data ?? []).map((a) => (
-              <div className="history-row" key={a.id}>
-                <time>{new Date(a.at).toLocaleString("ko-KR")}</time>
-                <strong>{a.reason}</strong>
-                <small>
-                  {a.actor === "user"
-                    ? "사용자 입력"
-                    : a.actor.startsWith("import")
-                      ? "가져온 기록"
-                      : "규칙에 따른 변경"}
-                </small>
-                <details>
-                  <summary>변경 전·후</summary>
-                  <pre>
-                    {JSON.stringify(
-                      {
-                        before: a.before_json
-                          ? JSON.parse(a.before_json)
-                          : null,
-                        after: JSON.parse(a.after_json),
-                      },
-                      null,
-                      2,
-                    )}
-                  </pre>
+          {!!claims.length &&
+            (type !== "products" || productSection === "cost") && (
+              <section className="panel">
+                <h2>확인할 값과 근거</h2>
+                <div className="claims-grid">
+                  {claims.map((c) => (
+                    <button
+                      className="claim-card"
+                      key={c.id}
+                      onClick={() => setActiveClaim(c)}
+                    >
+                      <span>{claimLabels[c.field_key] ?? c.field_key}</span>
+                      <div>
+                        <ClaimValue claim={c} />
+                      </div>
+                      <small>{c.source_ref ?? "출처를 연결하세요."}</small>
+                      <small
+                        className={
+                          c.recheck_by < new Date().toISOString().slice(0, 10)
+                            ? "overdue"
+                            : ""
+                        }
+                      >
+                        재확인 {c.recheck_by} · 증빙 {c.attachment_ids.length}개
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          {(type !== "products" || productSection === "history") && (
+            <>
+              <section className="panel">
+                <h2>연결된 기록</h2>
+                <div className="related-links">
+                  {Object.entries(catalog).flatMap(([other, definition]) =>
+                    Object.entries(definition.fields)
+                      .filter(([, f]) => f.ref === type)
+                      .flatMap(([key]) =>
+                        d.records[other]
+                          .filter((r) => r[key] === id)
+                          .map((r) => (
+                            <Link
+                              key={other + r.id}
+                              to={recordUrl(other, r.id)}
+                            >
+                              <span>{definition.label}</span>
+                              <strong>{title(r)}</strong>
+                            </Link>
+                          )),
+                      ),
+                  )}
+                  {related.map((l) => {
+                    const other = l.from_id === id ? l.to_type : l.from_type,
+                      oid = l.from_id === id ? l.to_id : l.from_id;
+                    return (
+                      <Link key={l.id} to={recordUrl(other, oid)}>
+                        {l.note || label(l.relation)} →{" "}
+                        {catalog[other]?.label ?? other}
+                      </Link>
+                    );
+                  })}
+                </div>
+                <Link to={recordUrl("links")}>기록 간 연결 추가 →</Link>
+              </section>
+              <section className="panel">
+                <h2>왜 이렇게 됐나요?</h2>
+                {history.isLoading && (
+                  <p className="muted">이력 불러오는 중…</p>
+                )}
+                {(history.data ?? []).map((a) => (
+                  <div className="history-row" key={a.id}>
+                    <time>{new Date(a.at).toLocaleString("ko-KR")}</time>
+                    <strong>{a.reason}</strong>
+                    <small>
+                      {a.actor === "user"
+                        ? "사용자 입력"
+                        : a.actor.startsWith("import")
+                          ? "가져온 기록"
+                          : "규칙에 따른 변경"}
+                    </small>
+                    <details>
+                      <summary>변경 전·후</summary>
+                      <pre>
+                        {JSON.stringify(
+                          {
+                            before: a.before_json
+                              ? JSON.parse(a.before_json)
+                              : null,
+                            after: JSON.parse(a.after_json),
+                          },
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    </details>
+                  </div>
+                ))}
+              </section>
+              {!["costings", "fx_rates"].includes(type) && (
+                <details className="panel">
+                  <summary>기록 삭제</summary>
+                  <p>
+                    연결된 기록이 있으면 삭제할 수 없습니다. 변경 이력은
+                    남습니다.
+                  </p>
+                  <input
+                    aria-label="삭제 이유"
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    placeholder="삭제 이유"
+                  />
+                  <button
+                    className="secondary"
+                    disabled={!deleteReason.trim()}
+                    onClick={remove}
+                  >
+                    이유를 남기고 삭제
+                  </button>
                 </details>
-              </div>
-            ))}
-          </section>
-          {!["costings", "fx_rates"].includes(type) && (
-            <details className="panel">
-              <summary>기록 삭제</summary>
-              <p>
-                연결된 기록이 있으면 삭제할 수 없습니다. 변경 이력은 남습니다.
-              </p>
-              <input
-                aria-label="삭제 이유"
-                value={deleteReason}
-                onChange={(e) => setDeleteReason(e.target.value)}
-                placeholder="삭제 이유"
-              />
-              <button
-                className="secondary"
-                disabled={!deleteReason.trim()}
-                onClick={remove}
-              >
-                이유를 남기고 삭제
-              </button>
-            </details>
+              )}
+            </>
           )}
         </>
       )}

@@ -19,10 +19,13 @@ import {
 } from "./Workspace";
 import { claimLabels, stages } from "../../domain/records/catalog";
 import { buildListingDraft } from "../../domain/listingKit";
+import { useProductSection } from "./ProductNavigation";
+import { Compare } from "./Compare";
 export function ResearchRecords() {
   const { type, id } = useParams();
+  const section = useProductSection();
   return (
-    <Records key={type + ":" + id}>
+    <Records key={type + ":" + id + (type === "products" ? section : "")}>
       {type === "products" && id ? (
         <ProductTools id={id} />
       ) : type === "costings" && id ? (
@@ -94,6 +97,8 @@ function ChannelTools({ id }: { id: string }) {
   );
 }
 function ProductTools({ id }: { id: string }) {
+  const section = useProductSection();
+  const productClaims = useClaims();
   const q = useWorkspace(),
     qc = useQueryClient();
   const [status, setStatus] = useState("researching"),
@@ -142,213 +147,312 @@ function ProductTools({ id }: { id: string }) {
   const profile = d.records.compliance_profiles.find(
     (r) => r.id === p.profile_id,
   );
+  const latest = d.records.costings.find((c) => c.product_id === id);
+  const salePrice =
+    productClaims.data?.find(
+      (c) =>
+        c.owner_type === "products" &&
+        c.owner_id === id &&
+        c.field_key === "decided_price" &&
+        c.status !== "unknown",
+    ) ??
+    productClaims.data?.find(
+      (c) =>
+        c.owner_type === "products" &&
+        c.owner_id === id &&
+        c.field_key === "sale_price",
+    );
+  const tasks = d.records.tasks.filter(
+    (t) =>
+      t.entity_type === "products" &&
+      t.entity_id === id &&
+      !["done", "cancelled"].includes(t.status),
+  );
+  if (section === "compare") return <Compare embeddedProductId={id} />;
   return (
     <>
-      <section className="panel">
-        <div className="section-head">
-          <h2>조사에서 가격 결정까지</h2>
-          <Link to={`/compare/${id}`}>중국·한국 판매처 비교 →</Link>
-          <button
-            className="secondary"
-            onClick={() => setShowTransition(!showTransition)}
-          >
-            단계 변경
-          </button>
+      <ErrorBox error={error} />
+      {message && (
+        <div role="status" className="alert">
+          {message}
         </div>
-        <div className="pipeline">
-          {[
-            "discovered",
-            "researching",
-            "costing",
-            "pricing",
-            "listing_ready",
-            "live",
-          ].map((s, i) => (
-            <div className={p.status === s ? "current" : ""} key={s}>
-              <small>0{i + 1}</small>
-              <strong>{label(s)}</strong>
-              {p.status === s && <span>현재 단계</span>}
+      )}
+      {section === "overview" && (
+        <>
+          <section className="panel">
+            <div className="section-head">
+              <h2>현재 상태</h2>
+              <Badge value={p.status} />
+              <button
+                className="secondary"
+                onClick={() => setShowTransition(!showTransition)}
+              >
+                단계 변경
+              </button>
             </div>
-          ))}
-        </div>
-        {d.grades?.[p.id] && (
-          <div className="alert" role="status">
-            <GradeBadge
-              grade={d.grades[p.id].grade}
-              estimated={d.grades[p.id].estimated}
-            />
-            <ul className="plain-list">
-              {d.grades[p.id].reasons.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-            {!!d.grades[p.id].next.length && (
-              <p>
-                <strong>등급을 올리려면:</strong>{" "}
-                {d.grades[p.id].next.join(" → ")}
-              </p>
-            )}
-          </div>
-        )}
-        <p>
-          판매 요건: <Badge value={profile?.gate_result ?? "unknown"} />{" "}
-          {profile && (
-            <Link to={recordUrl("compliance_profiles", profile.id)}>
-              항목별 이유 확인 →
-            </Link>
-          )}
-        </p>
-        {profile?.gate_result === "fail" && (
-          <div className="alert error">
-            가격 결정 진행 불가 · {profile.gate_reason}
-          </div>
-        )}
-        <ErrorBox error={error} />
-        {message && (
-          <div role="status" className="alert">
-            {message}
-          </div>
-        )}
-        {showTransition && (
-          <div className="form-grid">
-            <label>
-              이동할 단계
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                {stages
-                  .filter((s) => s !== "paused" || p.status === "live")
-                  .map((s) => (
-                    <option key={s} value={s}>
-                      {label(s)}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              변경 이유
-              <input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </label>
-            {status === "on_hold" && (
-              <label>
-                다시 검토할 날
-                <input
-                  type="date"
-                  value={recheck}
-                  onChange={(e) => setRecheck(e.target.value)}
+            <details>
+              <summary>전체 진행 단계</summary>
+              <div className="pipeline">
+                {[
+                  "discovered",
+                  "researching",
+                  "costing",
+                  "pricing",
+                  "listing_ready",
+                  "live",
+                ].map((s, i) => (
+                  <div className={p.status === s ? "current" : ""} key={s}>
+                    <small>0{i + 1}</small>
+                    <strong>{label(s)}</strong>
+                    {p.status === s && <span>현재 단계</span>}
+                  </div>
+                ))}
+              </div>
+            </details>
+            {d.grades?.[p.id] && (
+              <div className="alert" role="status">
+                <GradeBadge
+                  grade={d.grades[p.id].grade}
+                  estimated={d.grades[p.id].estimated}
                 />
-              </label>
+                <ul className="plain-list">
+                  {d.grades[p.id].reasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
             )}
-            <button disabled={!reason.trim()} onClick={transition}>
-              요건 확인 후 단계 변경
-            </button>
-          </div>
-        )}
-        <div className="buttons">
-          <Link className="button secondary" to={recordUrl("offers")}>
-            오퍼·견적 기록
-          </Link>
-          <Link
-            className="button secondary"
-            to={recordUrl("shipping_scenarios")}
-          >
-            배송 경로 기록
-          </Link>
-          <Link className="button secondary" to={recordUrl("product_variants")}>
-            옵션 기록
-          </Link>
-        </div>
-      </section>
-      {["listing_ready", "live", "paused"].includes(p.status) && (
-        <section className="panel">
-          <div className="section-head">
-            <h2>채널 등록</h2>
-            <Link className="button secondary" to={recordUrl("listings")}>
-              + 등록 상품 기록
-            </Link>
-          </div>
-          <p className="muted">
-            채널에 실제로 올린 뒤 채널 상품 번호·노출 확인일·이미지 출처를
-            기록하고 상태를 판매 중으로 바꿉니다. 등록 판매가는 결정 판매가와
-            같아야 합니다.{" "}
-            {d.records.sops.find((s) => s.key === "listing_manual") && (
-              <Link
-                to={recordUrl(
-                  "sops",
-                  d.records.sops.find((s) => s.key === "listing_manual")!.id,
+            <p>
+              판매 요건: <Badge value={profile?.gate_result ?? "unknown"} />{" "}
+              {profile && (
+                <Link to={recordUrl("compliance_profiles", profile.id)}>
+                  항목별 이유 확인 →
+                </Link>
+              )}
+            </p>
+            {profile?.gate_result === "fail" && (
+              <div className="alert error">
+                가격 결정 진행 불가 · {profile.gate_reason}
+              </div>
+            )}
+            {showTransition && (
+              <div className="form-grid">
+                <label>
+                  이동할 단계
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                  >
+                    {stages
+                      .filter((s) => s !== "paused" || p.status === "live")
+                      .map((s) => (
+                        <option key={s} value={s}>
+                          {label(s)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  변경 이유
+                  <input
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </label>
+                {status === "on_hold" && (
+                  <label>
+                    다시 검토할 날
+                    <input
+                      type="date"
+                      value={recheck}
+                      onChange={(e) => setRecheck(e.target.value)}
+                    />
+                  </label>
                 )}
-              >
-                절차 보기 →
-              </Link>
+                <button disabled={!reason.trim()} onClick={transition}>
+                  요건 확인 후 단계 변경
+                </button>
+              </div>
             )}
-          </p>
-          {(d.records.listings ?? []).filter((l) => l.product_id === p.id)
-            .length ? (
-            <ul className="plain-list">
-              {(d.records.listings ?? [])
-                .filter((l) => l.product_id === p.id)
-                .map((l) => (
-                  <li key={l.id}>
-                    <Link to={recordUrl("listings", l.id)}>
-                      <Badge value={l.status} />{" "}
-                      {
-                        d.records.channels.find((c) => c.id === l.channel_id)
-                          ?.name
-                      }
-                      {l.external_id && ` · ${l.external_id}`}
-                      {l.listed_price &&
-                        ` · ${Number(l.listed_price.amount_minor).toLocaleString("ko-KR")}원`}
-                    </Link>
+            <div className="buttons">
+              <Link className="button secondary" to={recordUrl("offers")}>
+                오퍼·견적 기록
+              </Link>
+              <Link
+                className="button secondary"
+                to={recordUrl("shipping_scenarios")}
+              >
+                배송 경로 기록
+              </Link>
+              <Link
+                className="button secondary"
+                to={recordUrl("product_variants")}
+              >
+                옵션 기록
+              </Link>
+            </div>
+          </section>
+          <section className="panel">
+            <h2>다음 할 일</h2>
+            {tasks.length ? (
+              <ul>
+                {tasks.slice(0, 3).map((t) => (
+                  <li key={t.id}>
+                    <Link to={recordUrl("tasks", t.id)}>{t.title}</Link>
+                    {t.blocked_reason && <p>{t.blocked_reason}</p>}
                   </li>
                 ))}
-            </ul>
-          ) : (
-            <p className="empty">
-              등록 상품 기록이 없습니다. 판매 중으로 가려면 하나가 필요합니다.
+              </ul>
+            ) : (
+              <p>
+                이 상품에 직접 연결된 열린 할 일이 없습니다. 판매 준비에서
+                미확인 요건과 남은 조건을 확인하세요.
+              </p>
+            )}
+            <Link to={`/records/products/${id}?tab=prepare`}>
+              판매 준비 확인 →
+            </Link>
+          </section>
+          <section className="panel">
+            <h2>최근 수익성 검토</h2>
+            {latest ? (
+              <>
+                <p>
+                  저장 당시 도착 원가 {won(latest.outputs?.landed_per_unit)} ·
+                  공헌이익 {won(latest.outputs?.contribution_per_unit)} / 개{" "}
+                  <Badge value={latest.overall_status ?? "unknown"} />
+                </p>
+                <small>
+                  {latest.created_at?.slice(0, 10)} 기준 · 현재 조건은 다시
+                  계산하세요.
+                </small>
+              </>
+            ) : (
+              <p>아직 저장된 원가 계산이 없습니다.</p>
+            )}
+            <p>
+              <Link to={`/records/products/${id}?tab=cost`}>
+                원가·수익성 계산 →
+              </Link>
             </p>
-          )}
-        </section>
-      )}
-      <ListingDraft product={p} data={d} />
-      <Calculator product={p} data={d} />
-      {p.status === "pricing" && (
-        <section className="panel">
-          <h2>가격 결정 · 왜 이 가격인가요?</h2>
+          </section>
           <p>
-            아래 가정 판매가·청구 배송비와 최신 원가 스냅샷을 묶어 결정으로
-            남깁니다.
+            {salePrice?.field_key === "decided_price"
+              ? "결정 판매가"
+              : "가정 판매가"}
+            : {salePrice ? <ClaimValue claim={salePrice} /> : "미확인"}
           </p>
-          <div className="form-grid">
-            <label>
-              결정 이유
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </label>
-            <label>
-              다른 대안
-              <input value={alt} onChange={(e) => setAlt(e.target.value)} />
-            </label>
-            <label>
-              대안을 고르지 않은 이유
-              <input value={why} onChange={(e) => setWhy(e.target.value)} />
-            </label>
-            <label>
-              다시 검토할 조건
-              <input
-                value={revisit}
-                onChange={(e) => setRevisit(e.target.value)}
-                placeholder="예: 실제 배송 견적 변경 또는 환율 5% 상승"
-              />
-            </label>
-          </div>
-          <button onClick={price}>현재 가정 가격을 결정으로 저장</button>
-        </section>
+        </>
+      )}
+      {section === "prepare" && (
+        <>
+          <section className="panel">
+            <h2>판매 요건</h2>
+            <Badge value={profile?.gate_result ?? "unknown"} />
+            <p>
+              {profile?.gate_reason || "요건을 확인한 뒤 판매를 준비하세요."}
+            </p>
+            {profile && (
+              <Link to={recordUrl("compliance_profiles", profile.id)}>
+                항목별 근거·판정 확인 →
+              </Link>
+            )}
+          </section>
+          {
+            <section className="panel">
+              <div className="section-head">
+                <h2>채널 등록</h2>
+                <Link className="button secondary" to={recordUrl("listings")}>
+                  + 등록 상품 기록
+                </Link>
+              </div>
+              <p className="muted">
+                채널에 실제로 올린 뒤 채널 상품 번호·노출 확인일·이미지 출처를
+                기록하고 상태를 판매 중으로 바꿉니다. 등록 판매가는 결정
+                판매가와 같아야 합니다.{" "}
+                {d.records.sops.find((s) => s.key === "listing_manual") && (
+                  <Link
+                    to={recordUrl(
+                      "sops",
+                      d.records.sops.find((s) => s.key === "listing_manual")!
+                        .id,
+                    )}
+                  >
+                    절차 보기 →
+                  </Link>
+                )}
+              </p>
+              {(d.records.listings ?? []).filter((l) => l.product_id === p.id)
+                .length ? (
+                <ul className="plain-list">
+                  {(d.records.listings ?? [])
+                    .filter((l) => l.product_id === p.id)
+                    .map((l) => (
+                      <li key={l.id}>
+                        <Link to={recordUrl("listings", l.id)}>
+                          <Badge value={l.status} />{" "}
+                          {
+                            d.records.channels.find(
+                              (c) => c.id === l.channel_id,
+                            )?.name
+                          }
+                          {l.external_id && ` · ${l.external_id}`}
+                          {l.listed_price &&
+                            ` · ${Number(l.listed_price.amount_minor).toLocaleString("ko-KR")}원`}
+                        </Link>
+                      </li>
+                    ))}
+                </ul>
+              ) : (
+                <p className="empty">
+                  등록 상품 기록이 없습니다. 판매 중으로 가려면 하나가
+                  필요합니다.
+                </p>
+              )}
+            </section>
+          }
+          <ListingDraft product={p} data={d} />
+        </>
+      )}
+      {section === "cost" && (
+        <>
+          <Calculator product={p} data={d} />
+          {p.status === "pricing" && (
+            <section className="panel">
+              <h2>가격 결정 · 왜 이 가격인가요?</h2>
+              <p>
+                아래 가정 판매가·청구 배송비와 최신 원가 스냅샷을 묶어 결정으로
+                남깁니다.
+              </p>
+              <div className="form-grid">
+                <label>
+                  결정 이유
+                  <textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </label>
+                <label>
+                  다른 대안
+                  <input value={alt} onChange={(e) => setAlt(e.target.value)} />
+                </label>
+                <label>
+                  대안을 고르지 않은 이유
+                  <input value={why} onChange={(e) => setWhy(e.target.value)} />
+                </label>
+                <label>
+                  다시 검토할 조건
+                  <input
+                    value={revisit}
+                    onChange={(e) => setRevisit(e.target.value)}
+                    placeholder="예: 실제 배송 견적 변경 또는 환율 5% 상승"
+                  />
+                </label>
+              </div>
+              <button onClick={price}>현재 가정 가격을 결정으로 저장</button>
+            </section>
+          )}
+        </>
       )}
     </>
   );
