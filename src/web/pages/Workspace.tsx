@@ -1456,11 +1456,6 @@ export function Records({ children }: { children?: React.ReactNode }) {
         }
       >
         <div className="buttons">
-          {type === "suppliers" && (
-            <Link className="button secondary" to="/sourcing">
-              직구·해외 소싱 사이트
-            </Link>
-          )}
           {record && (
             <Link className="button secondary" to={recordUrl(type)}>
               목록
