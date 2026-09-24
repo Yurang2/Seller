@@ -995,9 +995,11 @@ export function RecordEditor({
 export function ClaimEditor({
   claim,
   onClose,
+  defaultCurrency = "KRW",
 }: {
   claim: Claim & { id?: string };
   onClose: () => void;
+  defaultCurrency?: string;
 }) {
   const qc = useQueryClient();
   const [status, setStatus] = useState(claim.status),
@@ -1023,10 +1025,14 @@ export function ClaimEditor({
             : String(claim.value_json ?? ""),
     );
   const [currency, setCurrency] = useState(
-      (claim.value_json as any)?.currency ?? "KRW",
+      (claim.value_json as any)?.currency ?? defaultCurrency,
     ),
     [source, setSource] = useState(claim.source_ref ?? ""),
-    [sourceType, setSourceType] = useState(claim.source_type ?? "url"),
+    [sourceType, setSourceType] = useState(
+      claim.owner_type === "market_offers"
+        ? "competitor_observation"
+        : (claim.source_type ?? "url"),
+    ),
     [checked, setChecked] = useState(
       claim.checked_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     ),
@@ -1298,6 +1304,11 @@ export function ClaimEditor({
           <input
             type="file"
             multiple
+            accept={
+              claim.owner_type === "market_offers"
+                ? "image/*,application/pdf"
+                : undefined
+            }
             onChange={(e) => setFiles(e.target.files)}
           />
           <small>
@@ -1389,7 +1400,13 @@ export function Records({ children }: { children?: React.ReactNode }) {
     );
   const relatedTypes =
     [
-      ["products", "characters", "product_variants", "costings"],
+      [
+        "products",
+        "characters",
+        "product_variants",
+        "costings",
+        "market_offers",
+      ],
       ["compliance_profiles", "requirement_items"],
       ["suppliers", "offers", "supplier_messages"],
       ["shipping_scenarios", "shipping_legs", "forwarders", "rate_cards"],

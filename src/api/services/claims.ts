@@ -10,6 +10,22 @@ export async function upsertClaim(
   options: { priceDecision?: boolean } = {},
 ) {
   const { claim, downgraded } = normalizeClaim(input);
+  if (claim.owner_type === "market_offers") {
+    if (!["market_price", "market_shipping"].includes(claim.field_key))
+      fail("한국 판매처 관찰의 가격 또는 배송비를 선택하세요.");
+    if (claim.kind !== "money")
+      fail("한국 판매처 가격은 단일 금액으로 기록하세요.");
+    if (claim.status !== "unknown") {
+      const money = claim.value_json as {
+        currency: string;
+        amount_minor: number;
+      };
+      if (money.currency !== "KRW" || money.amount_minor < 0)
+        fail("한국 판매처 가격·배송비는 0 이상의 KRW 금액이어야 합니다.");
+      if (claim.source_type !== "competitor_observation")
+        fail("한국 판매처 가격은 경쟁사 관찰 출처로 기록하세요.");
+    }
+  }
   if (
     claim.owner_type === "products" &&
     ["decided_price", "decided_customer_shipping_fee"].includes(

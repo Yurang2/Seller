@@ -127,6 +127,19 @@ export function validateRecord(
     }
     out[k] = v;
   }
+  if (type === "market_offers") {
+    if (out.pack_quantity < 1) fail("묶음 수량은 1 이상이어야 합니다.");
+    try {
+      const url = new URL(out.url);
+      if (!["https:", "http:"].includes(url.protocol)) throw new Error();
+    } catch {
+      fail("판매처 웹링크는 http 또는 https 주소여야 합니다.");
+    }
+    if (out.match_kind !== "unknown" && !out.notes?.trim())
+      fail("같은 상품·유사 상품 판단 근거를 메모에 기록하세요.");
+    if (existing && out.product_id !== existing.product_id)
+      fail("비교 상품을 변경하려면 새 판매처 관찰을 만드세요.");
+  }
   if (type === "decisions") {
     if (
       !Array.isArray(out.alternatives_json) ||

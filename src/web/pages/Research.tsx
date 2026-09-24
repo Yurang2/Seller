@@ -147,6 +147,7 @@ function ProductTools({ id }: { id: string }) {
       <section className="panel">
         <div className="section-head">
           <h2>조사에서 가격 결정까지</h2>
+          <Link to={`/compare/${id}`}>중국·한국 판매처 비교 →</Link>
           <button
             className="secondary"
             onClick={() => setShowTransition(!showTransition)}

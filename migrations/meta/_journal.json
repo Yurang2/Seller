@@ -29,6 +29,13 @@
       "when": 1789826777472,
       "tag": "0004_orders_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790217726080,
+      "tag": "0005_market_offers",
+      "breakpoints": true
     }
   ]
 }

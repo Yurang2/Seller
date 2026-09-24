@@ -8,6 +8,7 @@ import {
 import { BrowserRouter, Routes, Route, NavLink, Link } from "react-router-dom";
 import { Home, Settings, Claims, ResearchImport } from "./pages/Workspace";
 import { Backup } from "./pages/Backup";
+import { Compare } from "./pages/Compare";
 import { ResearchRecords } from "./pages/Research";
 import { Capture } from "./pages/Capture";
 import { Login, useAuthStatus, logout } from "./pages/Login";
@@ -67,6 +68,7 @@ const primary = [
   { to: "/more", label: "더 보기", icon: icons.more },
 ];
 export const moreSections = [
+  ["/compare", "중국·한국 판매처 비교", "상품별 링크 · 옵션 · 가격 · 증빙"],
   ["/records/compliance_profiles", "판매 요건", "게이트 13항목 · 근거 강도"],
   ["/records/suppliers", "공급처·견적", "오퍼 · 대화 기록"],
   ["/records/shipping_scenarios", "배송 비교", "경로 · 요율표 · 포워더"],
@@ -152,6 +154,7 @@ function App({ authenticated }: { authenticated: boolean }) {
             <Route path="/claims" element={<Claims />} />
             <Route path="/research-import" element={<ResearchImport />} />
             <Route path="/backup" element={<Backup />} />
+            <Route path="/compare/:productId?" element={<Compare />} />
             <Route
               path="*"
               element={

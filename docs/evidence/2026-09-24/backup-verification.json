@@ -1,0 +1,9 @@
+{
+  "verified_at": "2026-09-24T02:57:16.474Z",
+  "archive_hash": "95cff62c4d52b22de20c04b131173045eb28d435b5b99fe6d80a330ca59fca5f",
+  "result": "passed",
+  "verified_records": 275,
+  "attachments": 2,
+  "original_activity_logs": 422,
+  "method": "ZIP → independent empty SQLite/files → export → exact records, original audit history and attachment bytes comparison"
+}

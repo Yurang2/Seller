@@ -38,6 +38,9 @@ const tables = [
   "readiness_items",
   "costings",
   "listings",
+  "orders",
+  "job_runs",
+  "market_offers",
 ] as const;
 type Table = (typeof tables)[number];
 type Row = Record<string, string | number | null>;
@@ -90,9 +93,11 @@ export async function exportArchive(env: Env, full = false) {
   const files: Record<string, Uint8Array> = {},
     counts: Record<string, number> = {};
   let attachmentRows: Row[] = [];
-  for (const t of tables) {
-    const rows = (await env.DB.prepare(`SELECT * FROM ${t}`).all<Row>())
-      .results;
+  const snapshot = await env.DB.batch<Row>(
+    tables.map((t) => env.DB.prepare(`SELECT * FROM ${t}`)),
+  );
+  for (const [index, t] of tables.entries()) {
+    const rows = snapshot[index].results;
     if (t === "attachments") attachmentRows = rows;
     const safe = (full ? rows : mask(rows)) as Row[];
     counts[t] = rows.length;
@@ -129,7 +134,7 @@ export async function exportArchive(env: Env, full = false) {
   files["attachments/manifest.json"] = strToU8(JSON.stringify(manifests));
   files["manifest.json"] = strToU8(
     JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       exported_at: new Date().toISOString(),
       pii_mode: full ? "full" : "masked",
       counts,
@@ -180,7 +185,7 @@ export async function restoreArchive(
     }
   }
   const manifest = json("manifest.json");
-  if (![1, 2].includes(manifest.schema_version))
+  if (![1, 2, 3].includes(manifest.schema_version))
     throw new AppError(
       409,
       "SCHEMA_VERSION",
@@ -202,9 +207,11 @@ export async function restoreArchive(
   const results: unknown[] = [];
   for (const t of tables) {
     const legacyMissing =
-      manifest.schema_version === 1 &&
       !files[`entities/${t}.json`] &&
-      tables.indexOf(t) > tables.indexOf("activity_log");
+      ((manifest.schema_version === 1 &&
+        tables.indexOf(t) > tables.indexOf("activity_log")) ||
+        (manifest.schema_version === 2 &&
+          ["orders", "job_runs", "market_offers"].includes(t)));
     const rows = legacyMissing ? [] : json(`entities/${t}.json`);
     const columns = tableColumns(t);
     if (

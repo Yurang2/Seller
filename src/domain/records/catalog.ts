@@ -63,6 +63,19 @@ export const stages = [
   "on_hold",
 ];
 export const catalog: Record<string, Definition> = {
+  market_offers: {
+    label: "한국 판매처 관찰",
+    fields: {
+      product_id: r("비교할 상품", "products", true),
+      name: t("판매처 이름", true),
+      url: t("상품 웹링크", true),
+      option_desc: t("옵션·규격", true),
+      match_kind: e("상품 일치 여부", "unknown|same|similar"),
+      pack_quantity: { ...n("표시 가격의 묶음 수량"), required: true },
+      notes: l("일치 판단 근거·배송 조건·메모"),
+    },
+    claims: { market_price: "money", market_shipping: "money" },
+  },
   notes: {
     label: "지식 노트",
     core: true,
@@ -487,6 +500,8 @@ export const catalog: Record<string, Definition> = {
   },
 };
 export const labels: Record<string, string> = {
+  same: "동일 상품",
+  similar: "유사 상품",
   received: "접수",
   ordered: "발주",
   shipped_cn: "발송",
@@ -581,6 +596,8 @@ export const labels: Record<string, string> = {
   unknown_source: "출처 미확인",
 };
 export const claimLabels: Record<string, string> = {
+  market_price: "한국 표시 가격 (묶음 전체)",
+  market_shipping: "한국 배송비 (해당 묶음)",
   rights_holder: "권리자",
   kr_licensee: "국내 라이선시",
   answer: "답변",

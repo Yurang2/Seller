@@ -1,0 +1,69 @@
+.compare-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+.compare-columns > section {
+  min-width: 0;
+}
+.compare-card {
+  margin-bottom: 20px;
+  overflow-wrap: anywhere;
+}
+.compare-card h3 {
+  margin-top: 0;
+}
+.compare-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line, #ddd);
+  padding: 16px 0;
+}
+.compare-fact small {
+  color: var(--muted, #666);
+}
+.compare-fact button {
+  align-self: flex-start;
+}
+.compare-total {
+  padding: 16px 0;
+  font-weight: 600;
+}
+.compare-product {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 600px;
+}
+.compare-page .section-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.compare-form,
+.compare-editor {
+  margin: 24px 0;
+}
+.compare-edit-anchor {
+  scroll-margin-top: 24px;
+}
+@media (max-width: 760px) {
+  .compare-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .compare-page input,
+  .compare-page select,
+  .compare-page textarea {
+    font-size: 16px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .compare-page button {
+    min-height: 44px;
+    white-space: normal;
+  }
+  .compare-page .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

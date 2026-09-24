@@ -937,6 +937,33 @@ export const orders = sqliteTable(
     ),
   ],
 );
+// 한국 판매처 관찰. 가격·배송비·증빙은 기존 Claim 경로로 저장한다.
+export const market_offers = sqliteTable(
+  "market_offers",
+  {
+    id: text("id").primaryKey(),
+    product_id: text("product_id")
+      .references((): AnySQLiteColumn => products.id)
+      .notNull(),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    option_desc: text("option_desc").notNull(),
+    match_kind: text("match_kind").notNull(),
+    pack_quantity: integer("pack_quantity").notNull(),
+    notes: text("notes"),
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+    deleted_at: text("deleted_at"),
+  },
+  (t) => [
+    index("idx_market_offers_product").on(t.product_id),
+    check(
+      "market_offers_match",
+      sql`match_kind IN ('unknown','same','similar')`,
+    ),
+    check("market_offers_quantity", sql`pack_quantity > 0`),
+  ],
+);
 // Job 실행 기록. 예약 실행(cron)은 실행 코드와 함께만 존재한다(R-10).
 export const job_runs = sqliteTable(
   "job_runs",
